@@ -162,6 +162,11 @@ const TaskManager = () => {
                           <PriorityBadge priority={task.priority} />
                        </div>
                        {task.dueDate && <span className="bg-slate-800 px-2 py-0.5 rounded">Due: {task.dueDate}</span>}
+                       {task.isRecurring && (
+                         <span className="text-[10px] uppercase tracking-wider font-bold text-blue-400 border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 rounded flex items-center gap-1">
+                           🔄 {task.recurringType === 'daily' ? 'Daily' : task.recurringType === 'weekly' ? 'Weekly' : 'Monthly'}
+                         </span>
+                       )}
                        {view === 'ALL' && (
                          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 border border-slate-700 px-1 rounded">
                            {task.isDaily ? 'Today' : 'Backlog'}
@@ -235,6 +240,77 @@ const TaskManager = () => {
           value={editingTask.dueDate || ''}
           onChange={e => setEditingTask({...editingTask, dueDate: e.target.value})}
         />
+        
+        {/* Recurring Task Section */}
+        <div className="space-y-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
+          <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
+            <input
+              type="checkbox"
+              checked={editingTask.isRecurring || false}
+              onChange={e => setEditingTask({...editingTask, isRecurring: e.target.checked, recurringType: e.target.checked ? 'weekly' : undefined})}
+              className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="font-medium">🔄 Recurring Task</span>
+          </label>
+
+          {editingTask.isRecurring && (
+            <div className="space-y-3 ml-6">
+              <Select
+                label="Repeat Pattern"
+                value={editingTask.recurringType || 'weekly'}
+                onChange={e => setEditingTask({...editingTask, recurringType: e.target.value as any})}
+                options={[
+                  { value: 'daily', label: 'Every Day' },
+                  { value: 'weekly', label: 'Weekly (Select Days)' },
+                  { value: 'monthly', label: 'Monthly (Select Date)' },
+                ]}
+              />
+
+              {editingTask.recurringType === 'weekly' && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-2">Repeat On</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => {
+                      const isSelected = (editingTask.recurringDays || []).includes(idx);
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            const days = editingTask.recurringDays || [];
+                            const newDays = isSelected
+                              ? days.filter(d => d !== idx)
+                              : [...days, idx].sort();
+                            setEditingTask({...editingTask, recurringDays: newDays});
+                          }}
+                          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                            isSelected
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                          }`}
+                        >
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {editingTask.recurringType === 'monthly' && (
+                <Input
+                  label="Day of Month (1-31)"
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={editingTask.recurringDate || ''}
+                  onChange={e => setEditingTask({...editingTask, recurringDate: parseInt(e.target.value) || undefined})}
+                />
+              )}
+            </div>
+          )}
+        </div>
+
         <TextArea
           label="Notes / Description"
           placeholder="Add extra details here..."

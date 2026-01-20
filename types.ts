@@ -50,6 +50,10 @@ export interface Task extends BaseItem {
   isDaily: boolean; // True = Daily View, False = Backlog
   isCompleted: boolean;
   dueDate?: string;
+  isRecurring?: boolean;
+  recurringType?: 'daily' | 'weekly' | 'monthly' | 'custom';
+  recurringDays?: number[]; // For weekly: 0=Sunday, 1=Monday, etc.
+  recurringDate?: number; // For monthly: day of month (1-31)
 }
 
 export interface JobApplication extends BaseItem {
