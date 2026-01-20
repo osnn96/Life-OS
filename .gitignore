@@ -12,8 +12,8 @@ build/
 .env.development
 .env.production
 
-# Firebase sensitive config
-services/firebase.ts
+# Firebase sensitive config - REMOVED (now using .env)
+# services/firebase.ts
 
 # IDE
 .vscode/
