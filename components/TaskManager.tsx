@@ -8,7 +8,7 @@ import { Plus, CheckSquare, Square, Trash2, Calendar, Archive, Layers, FileText 
 const TaskManager = () => {
   const { currentUser } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [view, setView] = useState<'DAILY' | 'BACKLOG' | 'ALL'>('DAILY');
+  const [view, setView] = useState<'DAILY' | 'BACKLOG' | 'UPCOMING' | 'ALL'>('DAILY');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Partial<Task>>({});
 
@@ -63,12 +63,24 @@ const TaskManager = () => {
     setIsModalOpen(true);
   };
 
+  const today = new Date().toISOString().split('T')[0];
+  
   const filteredTasks = tasks.filter(t => {
     if (view === 'ALL') return true;
-    return view === 'DAILY' ? t.isDaily : !t.isDaily;
+    if (view === 'DAILY') return t.isDaily;
+    if (view === 'BACKLOG') return !t.isDaily;
+    if (view === 'UPCOMING') {
+      // Show tasks with due date in the future
+      return t.dueDate && t.dueDate > today;
+    }
+    return true;
   }).sort((a, b) => {
     // Sort completed to bottom
     if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+    // For upcoming view, sort by due date
+    if (view === 'UPCOMING' && a.dueDate && b.dueDate) {
+      return a.dueDate.localeCompare(b.dueDate);
+    }
     // Sort by priority
     const pMap = { [Priority.HIGH]: 0, [Priority.MEDIUM]: 1, [Priority.LOW]: 2 };
     return pMap[a.priority] - pMap[b.priority];
@@ -77,7 +89,7 @@ const TaskManager = () => {
   return (
     <div className="p-4 md:p-8 animate-in fade-in">
       <PageHeader 
-        title={view === 'DAILY' ? "Today's Focus" : view === 'BACKLOG' ? "Backlog" : "All Tasks"} 
+        title={view === 'DAILY' ? "Today's Focus" : view === 'BACKLOG' ? "Backlog" : view === 'UPCOMING' ? "Upcoming Tasks" : "All Tasks"} 
         action={
           <button 
             onClick={() => { setEditingTask({}); setIsModalOpen(true); }}
@@ -89,12 +101,18 @@ const TaskManager = () => {
       />
 
       {/* Filter Tabs */}
-      <div className="flex p-1 bg-slate-900 rounded-lg mb-6 w-full max-w-md border border-slate-800">
+      <div className="flex p-1 bg-slate-900 rounded-lg mb-6 w-full max-w-2xl border border-slate-800">
         <button 
           onClick={() => setView('DAILY')}
           className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all ${view === 'DAILY' ? 'bg-surface text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
         >
           <Calendar size={14} /> Today
+        </button>
+        <button 
+          onClick={() => setView('UPCOMING')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all ${view === 'UPCOMING' ? 'bg-surface text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+        >
+          <FileText size={14} /> Upcoming
         </button>
         <button 
           onClick={() => setView('BACKLOG')}
@@ -206,13 +224,13 @@ const TaskManager = () => {
             value={editingTask.isDaily ? 'true' : 'false'}
             onChange={e => setEditingTask({...editingTask, isDaily: e.target.value === 'true'})}
             options={[
-              { value: 'true', label: 'Daily View' },
+              { value: 'true', label: 'Today' },
               { value: 'false', label: 'Backlog' },
             ]}
           />
         </div>
         <Input 
-          label="Due Date (Optional)" 
+          label="Due Date" 
           type="date"
           value={editingTask.dueDate || ''}
           onChange={e => setEditingTask({...editingTask, dueDate: e.target.value})}
