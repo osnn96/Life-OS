@@ -2,20 +2,48 @@ import React, { useState, useEffect } from 'react';
 import { MasterApplication, Priority, MasterAppType, EnglishReq, DocumentItem } from '../types';
 import { masterService } from '../services/db';
 import { PriorityBadge, Card, PageHeader, Modal, Input, Select, TextArea } from './Shared';
-import { Plus, Trash2, BookOpen, CheckCircle, Circle, MapPin, Mail } from 'lucide-react';
+import { Plus, Trash2, BookOpen, CheckCircle, Circle, MapPin, Mail, FileText, X, Check } from 'lucide-react';
+
+// Default document templates
+const DEFAULT_DOCUMENTS: Omit<DocumentItem, 'id'>[] = [
+  { name: 'CV', isCompleted: false, isRequired: true },
+  { name: 'Transcript', isCompleted: false, isRequired: true },
+  { name: 'Motivation Letter', isCompleted: false, isRequired: true },
+  { name: 'Reference Letters', isCompleted: false, isRequired: false },
+  { name: 'Language Certificate', isCompleted: false, isRequired: false },
+];
 
 const MasterTracker = () => {
   const [apps, setApps] = useState<MasterApplication[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  const [selectedApp, setSelectedApp] = useState<MasterApplication | null>(null);
   const [editingApp, setEditingApp] = useState<Partial<MasterApplication>>({});
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
 
   // Subscribe to real-time updates
   useEffect(() => {
-    const unsubscribe = masterService.subscribe(setApps);
+    const unsubscribe = masterService.subscribe((apps) => {
+      // Normalize documents: ensure all have unique IDs
+      const normalizedApps = apps.map(app => ({
+        ...app,
+        documents: app.documents?.map(doc => ({
+          ...doc,
+          id: doc.id || crypto.randomUUID() // Add ID if missing
+        })) || []
+      }));
+      setApps(normalizedApps);
+    });
     return () => unsubscribe();
   }, []);
 
   const handleSave = async () => {
+    // Ensure all documents have unique IDs
+    const documentsWithIds = (editingApp.documents || DEFAULT_DOCUMENTS.map(doc => ({ ...doc, id: crypto.randomUUID() }))).map(doc => ({
+      ...doc,
+      id: doc.id || crypto.randomUUID()
+    }));
+
     const baseApp: Omit<MasterApplication, 'id'> = {
       university: editingApp.university || 'Unknown Uni',
       program: editingApp.program || 'Unknown Program',
@@ -25,11 +53,7 @@ const MasterTracker = () => {
       priority: editingApp.priority || Priority.MEDIUM,
       englishReq: editingApp.englishReq || EnglishReq.NONE,
       probability: editingApp.probability || 50,
-      documents: editingApp.documents || [
-        { name: 'CV', isReady: false }, 
-        { name: 'Transcript', isReady: false },
-        { name: 'Motivation Letter', isReady: false }
-      ],
+      documents: documentsWithIds,
       professorName: editingApp.professorName || '',
       professorEmail: editingApp.professorEmail || '',
       professorContacted: editingApp.professorContacted || false,
@@ -48,16 +72,140 @@ const MasterTracker = () => {
     setEditingApp({});
   };
 
-  const toggleDoc = async (app: MasterApplication, docIndex: number) => {
-    const newDocs = [...app.documents];
-    newDocs[docIndex].isReady = !newDocs[docIndex].isReady;
-    await masterService.update(app.id, { documents: newDocs });
-  };
-
   const deleteApp = async (id: string) => {
     if(confirm('Delete application?')) {
       await masterService.delete(id);
     }
+  };
+
+  // Open document modal
+  const openDocumentModal = (app: MasterApplication) => {
+    setSelectedApp(app);
+    setIsDocModalOpen(true);
+  };
+
+  // Toggle document completion
+  const toggleDocument = async (docId: string) => {
+    if (!selectedApp) return;
+
+    // Get fresh app data from apps array
+    const currentApp = apps.find(a => a.id === selectedApp.id);
+    if (!currentApp) return;
+
+    const updatedDocs = currentApp.documents.map(doc =>
+      doc.id === docId ? { ...doc, isCompleted: !doc.isCompleted } : doc
+    );
+
+    await masterService.update(selectedApp.id, {
+      documents: updatedDocs,
+      updatedAt: new Date().toISOString()
+    });
+  };
+
+  // Add custom document
+  const addCustomDocument = async () => {
+    if (!selectedApp) return;
+
+    // Get fresh app data from apps array
+    const currentApp = apps.find(a => a.id === selectedApp.id);
+    if (!currentApp) return;
+
+    const newDoc: DocumentItem = {
+      id: crypto.randomUUID(),
+      name: 'New Document',
+      isCompleted: false,
+      isRequired: false,
+      notes: ''
+    };
+
+    await masterService.update(selectedApp.id, {
+      documents: [...currentApp.documents, newDoc],
+      updatedAt: new Date().toISOString()
+    });
+  };
+
+  // Delete document
+  const deleteDocument = async (docId: string) => {
+    if (!selectedApp) return;
+
+    // Get fresh app data from apps array
+    const currentApp = apps.find(a => a.id === selectedApp.id);
+    if (!currentApp) return;
+
+    const updatedDocs = currentApp.documents.filter(doc => doc.id !== docId);
+
+    await masterService.update(selectedApp.id, {
+      documents: updatedDocs,
+      updatedAt: new Date().toISOString()
+    });
+  };
+
+  // Update document name
+  const updateDocumentName = async (docId: string, newName: string) => {
+    if (!selectedApp) return;
+
+    // Get fresh app data from apps array
+    const currentApp = apps.find(a => a.id === selectedApp.id);
+    if (!currentApp) return;
+
+    const updatedDocs = currentApp.documents.map(doc =>
+      doc.id === docId ? { ...doc, name: newName } : doc
+    );
+
+    await masterService.update(selectedApp.id, {
+      documents: updatedDocs,
+      updatedAt: new Date().toISOString()
+    });
+  };
+
+  // Form document management
+  const addFormDocument = () => {
+    setEditingApp(prev => ({
+      ...prev,
+      documents: [
+        ...(prev.documents || []),
+        {
+          id: crypto.randomUUID(),
+          name: 'New Document',
+          isCompleted: false,
+          isRequired: false
+        }
+      ]
+    }));
+  };
+
+  const removeFormDocument = (docId: string) => {
+    setEditingApp(prev => ({
+      ...prev,
+      documents: (prev.documents || []).filter(doc => doc.id !== docId)
+    }));
+  };
+
+  const updateFormDocumentName = (docId: string, name: string) => {
+    setEditingApp(prev => ({
+      ...prev,
+      documents: (prev.documents || []).map(doc =>
+        doc.id === docId ? { ...doc, name } : doc
+      )
+    }));
+  };
+
+  const toggleFormDocumentRequired = (docId: string) => {
+    setEditingApp(prev => ({
+      ...prev,
+      documents: (prev.documents || []).map(doc =>
+        doc.id === docId ? { ...doc, isRequired: !doc.isRequired } : doc
+      )
+    }));
+  };
+
+  const toggleFormDocumentCompleted = (docId: string) => {
+    setEditingApp(prev => ({
+      ...prev,
+      documents: (prev.documents || []).map(doc =>
+        doc.id === docId ? { ...doc, isCompleted: !doc.isCompleted } : doc
+      )
+    }));
   };
 
   return (
@@ -66,7 +214,12 @@ const MasterTracker = () => {
         title="Master's Degree Applications" 
         action={
           <button 
-            onClick={() => { setEditingApp({}); setIsModalOpen(true); }}
+            onClick={() => { 
+              setEditingApp({
+                documents: DEFAULT_DOCUMENTS.map(doc => ({ ...doc, id: crypto.randomUUID() }))
+              }); 
+              setIsModalOpen(true); 
+            }}
             className="bg-primary hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2"
           >
             <Plus size={16} /> Add Application
@@ -110,17 +263,35 @@ const MasterTracker = () => {
               )}
             </div>
 
-            {/* Right: Checklist */}
-            <div className="w-full md:w-64 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
-              <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Documents</h4>
-              <div className="space-y-2">
-                {app.documents.map((doc, idx) => (
-                  <div key={idx} onClick={() => toggleDoc(app, idx)} className="flex items-center gap-2 cursor-pointer hover:bg-slate-800 p-1 rounded transition-colors">
-                    {doc.isReady ? <CheckCircle size={16} className="text-green-500"/> : <Circle size={16} className="text-slate-600"/>}
-                    <span className={`text-sm ${doc.isReady ? 'text-slate-400 line-through' : 'text-slate-300'}`}>{doc.name}</span>
+            {/* Right: Document Summary Button */}
+            <div className="w-full md:w-64">
+              <button
+                onClick={() => openDocumentModal(app)}
+                className="w-full bg-slate-900/50 hover:bg-slate-800 p-4 rounded-lg border border-slate-700/50 transition-colors text-left"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                    <FileText size={14} /> Documents
+                  </h4>
+                  <span className="text-slate-400">›</span>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Progress:</span>
+                    <span className="text-white font-medium">
+                      {app.documents?.filter(d => d.isCompleted).length || 0} / {app.documents?.length || 0}
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div
+                      className="bg-green-500 h-2 rounded-full transition-all"
+                      style={{
+                        width: `${((app.documents?.filter(d => d.isCompleted).length || 0) / (app.documents?.length || 1)) * 100}%`
+                      }}
+                    />
+                  </div>
+                </div>
+              </button>
             </div>
 
             {/* Actions */}
@@ -137,6 +308,7 @@ const MasterTracker = () => {
         {apps.length === 0 && <div className="text-center text-slate-500 py-10">No applications tracked.</div>}
       </div>
 
+      {/* Add/Edit Application Modal */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Master's Application">
         <Input label="University" value={editingApp.university || ''} onChange={e => setEditingApp({...editingApp, university: e.target.value})} />
         <Input label="Program" value={editingApp.program || ''} onChange={e => setEditingApp({...editingApp, program: e.target.value})} />
@@ -170,6 +342,64 @@ const MasterTracker = () => {
            />
            <Input label="Probability Score (%)" type="number" value={editingApp.probability || 0} onChange={e => setEditingApp({...editingApp, probability: parseInt(e.target.value)})} />
         </div>
+
+        {/* Document Management in Form */}
+        <hr className="border-slate-700 my-4" />
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <h4 className="text-sm font-bold text-white">Required Documents</h4>
+            <button
+              type="button"
+              onClick={addFormDocument}
+              className="flex items-center gap-1 text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              <Plus size={14} /> Add Document
+            </button>
+          </div>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {(editingApp.documents || []).map((doc) => (
+              <div key={doc.id} className="flex items-center gap-2 bg-slate-700/50 p-2 rounded">
+                <button
+                  type="button"
+                  onClick={() => toggleFormDocumentCompleted(doc.id)}
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                    doc.isCompleted
+                      ? 'bg-green-500 border-green-500'
+                      : 'border-slate-500 hover:border-green-500'
+                  }`}
+                >
+                  {doc.isCompleted && <Check size={14} className="text-white" />}
+                </button>
+                <input
+                  type="text"
+                  value={doc.name}
+                  onChange={(e) => updateFormDocumentName(doc.id, e.target.value)}
+                  className={`flex-1 bg-slate-600 text-white rounded px-2 py-1 text-sm ${
+                    doc.isCompleted ? 'line-through text-slate-400' : ''
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleFormDocumentRequired(doc.id)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    doc.isRequired
+                      ? 'bg-red-500/20 text-red-400'
+                      : 'bg-slate-600 text-slate-400'
+                  }`}
+                >
+                  {doc.isRequired ? 'Required' : 'Optional'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeFormDocument(doc.id)}
+                  className="p-1 text-red-400 hover:bg-red-500/20 rounded"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
         
         <hr className="border-slate-700 my-4" />
         <h4 className="text-sm font-bold text-white mb-2">Professor Contact Info</h4>
@@ -188,6 +418,117 @@ const MasterTracker = () => {
           <button onClick={handleSave} className="bg-primary text-white px-4 py-2 rounded-lg font-medium">Save Application</button>
         </div>
       </Modal>
+
+      {/* Document Management Modal */}
+      {isDocModalOpen && selectedApp && (() => {
+        // Get real-time synced app data
+        const currentApp = apps.find(a => a.id === selectedApp.id) || selectedApp;
+        return (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setIsDocModalOpen(false)}>
+          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-white">{currentApp.university}</h3>
+                <p className="text-sm text-slate-400">{currentApp.program}</p>
+              </div>
+              <button onClick={() => setIsDocModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {currentApp.documents?.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors group"
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <button
+                      onClick={() => toggleDocument(doc.id)}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        doc.isCompleted
+                          ? 'bg-green-500 border-green-500'
+                          : 'border-slate-500 hover:border-green-500'
+                      }`}
+                    >
+                      {doc.isCompleted && <Check size={14} className="text-white" />}
+                    </button>
+                    
+                    <div className="flex-1 min-w-0">
+                      {editingDocId === doc.id ? (
+                        <input
+                          type="text"
+                          autoFocus
+                          defaultValue={doc.name}
+                          onBlur={(e) => {
+                            updateDocumentName(doc.id, e.target.value);
+                            setEditingDocId(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              updateDocumentName(doc.id, e.currentTarget.value);
+                              setEditingDocId(null);
+                            }
+                            if (e.key === 'Escape') {
+                              setEditingDocId(null);
+                            }
+                          }}
+                          className="w-full bg-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      ) : (
+                        <p 
+                          onClick={() => setEditingDocId(doc.id)}
+                          className={`font-medium cursor-text hover:bg-slate-600/30 px-2 py-1 rounded transition-colors ${
+                            doc.isCompleted ? 'text-slate-400 line-through' : 'text-white'
+                          }`}
+                        >
+                          {doc.name}
+                        </p>
+                      )}
+                      {doc.isRequired && (
+                        <span className="text-xs text-red-400 ml-2">Required</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => deleteDocument(doc.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:bg-red-500/20 rounded transition-opacity"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+
+              <button
+                onClick={addCustomDocument}
+                className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-slate-600 rounded-lg text-slate-400 hover:border-blue-500 hover:text-blue-400 transition-colors"
+              >
+                <Plus size={18} />
+                Add Custom Document
+              </button>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-700">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-slate-400">Progress:</span>
+                <span className="text-white font-medium">
+                  {currentApp.documents?.filter(d => d.isCompleted).length || 0} / {currentApp.documents?.length || 0}
+                </span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div
+                  className="bg-green-500 h-2 rounded-full transition-all"
+                  style={{
+                    width: `${((currentApp.documents?.filter(d => d.isCompleted).length || 0) / (currentApp.documents?.length || 1)) * 100}%`
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
     </div>
   );
 };

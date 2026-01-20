@@ -62,8 +62,11 @@ export interface JobApplication extends BaseItem {
 }
 
 export interface DocumentItem {
+  id: string;
   name: string;
-  isReady: boolean;
+  isCompleted: boolean;
+  isRequired: boolean;
+  notes?: string;
 }
 
 export interface MasterApplication extends BaseItem {
