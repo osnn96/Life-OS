@@ -1,0 +1,227 @@
+import React, { useState, useEffect } from 'react';
+import { Task, Priority } from '../types';
+import { taskService } from '../services/db';
+import { PriorityBadge, Card, PageHeader, Modal, Input, Select, TextArea } from './Shared';
+import { Plus, CheckSquare, Square, Trash2, Calendar, Archive, Layers, FileText } from 'lucide-react';
+
+const TaskManager = () => {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [view, setView] = useState<'DAILY' | 'BACKLOG' | 'ALL'>('DAILY');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Partial<Task>>({});
+
+  // Subscribe to real-time updates
+  useEffect(() => {
+    const unsubscribe = taskService.subscribe(setTasks);
+    return () => unsubscribe();
+  }, []);
+
+  const handleSave = async () => {
+    const baseTask: Omit<Task, 'id'> = {
+      title: editingTask.title || 'New Task',
+      priority: editingTask.priority || Priority.MEDIUM,
+      isDaily: editingTask.isDaily ?? (view === 'DAILY' || view === 'ALL'),
+      isCompleted: editingTask.isCompleted || false,
+      description: editingTask.description || '',
+      dueDate: editingTask.dueDate || '',
+      createdAt: editingTask.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (editingTask.id) {
+      await taskService.update(editingTask.id, baseTask);
+    } else {
+      await taskService.add(baseTask);
+    }
+    setIsModalOpen(false);
+    setEditingTask({});
+  };
+
+  const toggleComplete = async (e: React.MouseEvent, task: Task) => {
+    e.stopPropagation(); // Prevent opening modal
+    await taskService.update(task.id, { isCompleted: !task.isCompleted });
+  };
+
+  const deleteTask = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation(); // Prevent opening modal
+    if(confirm('Delete this task?')) {
+      await taskService.delete(id);
+    }
+  };
+
+  const openEditModal = (task: Task) => {
+    setEditingTask(task);
+    setIsModalOpen(true);
+  };
+
+  const filteredTasks = tasks.filter(t => {
+    if (view === 'ALL') return true;
+    return view === 'DAILY' ? t.isDaily : !t.isDaily;
+  }).sort((a, b) => {
+    // Sort completed to bottom
+    if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+    // Sort by priority
+    const pMap = { [Priority.HIGH]: 0, [Priority.MEDIUM]: 1, [Priority.LOW]: 2 };
+    return pMap[a.priority] - pMap[b.priority];
+  });
+
+  return (
+    <div className="p-4 md:p-8 animate-in fade-in">
+      <PageHeader 
+        title={view === 'DAILY' ? "Today's Focus" : view === 'BACKLOG' ? "Backlog" : "All Tasks"} 
+        action={
+          <button 
+            onClick={() => { setEditingTask({}); setIsModalOpen(true); }}
+            className="bg-primary hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2"
+          >
+            <Plus size={16} /> Add Task
+          </button>
+        }
+      />
+
+      {/* Filter Tabs */}
+      <div className="flex p-1 bg-slate-900 rounded-lg mb-6 w-full max-w-md border border-slate-800">
+        <button 
+          onClick={() => setView('DAILY')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all ${view === 'DAILY' ? 'bg-surface text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+        >
+          <Calendar size={14} /> Today
+        </button>
+        <button 
+          onClick={() => setView('BACKLOG')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all ${view === 'BACKLOG' ? 'bg-surface text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+        >
+          <Archive size={14} /> Backlog
+        </button>
+        <button 
+          onClick={() => setView('ALL')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all ${view === 'ALL' ? 'bg-surface text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+        >
+          <Layers size={14} /> All Tasks
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {filteredTasks.length === 0 && (
+          <div className="text-center py-10 text-slate-500">No tasks found in this view.</div>
+        )}
+        {filteredTasks.map(task => (
+          <Card 
+            key={task.id} 
+            className={`
+              transition-all cursor-pointer hover:border-slate-500 active:scale-[0.99] group
+              ${task.isCompleted ? 'opacity-50' : ''}
+            `}
+          >
+            <div onClick={() => openEditModal(task)} className="w-full">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-4 flex-1">
+                  <button onClick={(e) => toggleComplete(e, task)} className="mt-1 text-slate-400 hover:text-primary transition-colors">
+                    {task.isCompleted ? <CheckSquare size={24} className="text-green-500" /> : <Square size={24} />}
+                  </button>
+                  <div className="flex flex-col gap-1 w-full">
+                    <div className="flex justify-between items-start pr-2">
+                       <span className={`font-medium ${task.isCompleted ? 'line-through text-slate-500' : 'text-slate-200'}`}>
+                        {task.title}
+                      </span>
+                      {/* Mobile-friendly Actions positioned at top right of content */}
+                       <div className="flex items-center gap-2 md:hidden">
+                          <PriorityBadge priority={task.priority} />
+                       </div>
+                    </div>
+                   
+                    <div className="flex flex-wrap gap-2 text-xs text-slate-400 items-center mt-1">
+                       <div className="hidden md:block">
+                          <PriorityBadge priority={task.priority} />
+                       </div>
+                       {task.dueDate && <span className="bg-slate-800 px-2 py-0.5 rounded">Due: {task.dueDate}</span>}
+                       {view === 'ALL' && (
+                         <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 border border-slate-700 px-1 rounded">
+                           {task.isDaily ? 'Today' : 'Backlog'}
+                         </span>
+                       )}
+                    </div>
+
+                    {/* Description / Note Preview */}
+                    {task.description && (
+                      <div className="mt-3 flex gap-2 items-start text-xs text-slate-400 bg-slate-900/50 p-2.5 rounded border border-slate-700/50">
+                        <FileText size={14} className="mt-0.5 shrink-0 text-slate-500" />
+                        <p className="line-clamp-2">{task.description}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Desktop Delete Action */}
+                <button 
+                  onClick={(e) => deleteTask(e, task.id)}
+                  className="hidden md:block p-2 hover:bg-red-900/30 rounded text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+              
+              {/* Mobile Only Delete (Bottom Right) */}
+              <div className="md:hidden flex justify-end mt-2 pt-2 border-t border-slate-800">
+                 <button 
+                  onClick={(e) => deleteTask(e, task.id)}
+                  className="text-xs text-red-400 flex items-center gap-1"
+                >
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingTask.id ? "Edit Task" : "New Task"}>
+        <Input 
+          label="Title" 
+          value={editingTask.title || ''} 
+          onChange={e => setEditingTask({...editingTask, title: e.target.value})} 
+        />
+        <div className="grid grid-cols-2 gap-4">
+          <Select 
+            label="Priority" 
+            value={editingTask.priority || Priority.MEDIUM}
+            onChange={e => setEditingTask({...editingTask, priority: e.target.value as Priority})}
+            options={[
+              { value: Priority.HIGH, label: 'High' },
+              { value: Priority.MEDIUM, label: 'Medium' },
+              { value: Priority.LOW, label: 'Low' },
+            ]}
+          />
+          <Select 
+            label="List" 
+            value={editingTask.isDaily ? 'true' : 'false'}
+            onChange={e => setEditingTask({...editingTask, isDaily: e.target.value === 'true'})}
+            options={[
+              { value: 'true', label: 'Daily View' },
+              { value: 'false', label: 'Backlog' },
+            ]}
+          />
+        </div>
+        <Input 
+          label="Due Date (Optional)" 
+          type="date"
+          value={editingTask.dueDate || ''}
+          onChange={e => setEditingTask({...editingTask, dueDate: e.target.value})}
+        />
+        <TextArea
+          label="Notes / Description"
+          placeholder="Add extra details here..."
+          value={editingTask.description || ''}
+          onChange={e => setEditingTask({...editingTask, description: e.target.value})}
+        />
+        <div className="mt-4 flex justify-end">
+          <button onClick={handleSave} className="bg-primary text-white px-4 py-2 rounded-lg font-medium">
+            Save Task
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+};
+
+export default TaskManager;
