@@ -19,6 +19,23 @@ const TaskManager = () => {
     return () => unsubscribe();
   }, [currentUser]);
 
+  // Auto-move overdue daily tasks to backlog
+  useEffect(() => {
+    if (!currentUser || tasks.length === 0) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    tasks.forEach(async (task) => {
+      // If task is daily, not completed, and due date is in the past
+      if (task.isDaily && !task.isCompleted && task.dueDate && task.dueDate < today) {
+        await taskService.update(task.id, {
+          isDaily: false,
+          overdueFromDaily: true
+        });
+      }
+    });
+  }, [tasks, currentUser]);
+
   const handleSave = async () => {
     if (!currentUser) return;
 
@@ -163,6 +180,11 @@ const TaskManager = () => {
                           <PriorityBadge priority={task.priority} />
                        </div>
                        {task.dueDate && <span className="bg-slate-800 px-2 py-0.5 rounded">Due: {task.dueDate}</span>}
+                       {task.overdueFromDaily && (
+                         <span className="text-[10px] uppercase tracking-wider font-bold text-orange-400 bg-orange-500/20 border border-orange-500/50 px-2 py-0.5 rounded animate-pulse">
+                           NOT COMPLETED
+                         </span>
+                       )}
                        {view === 'ALL' && (
                          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 border border-slate-700 px-1 rounded">
                            {task.isDaily ? 'Today' : 'Backlog'}

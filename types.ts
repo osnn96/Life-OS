@@ -50,6 +50,7 @@ export interface Task extends BaseItem {
   isDaily: boolean; // True = Daily View, False = Backlog
   isCompleted: boolean;
   dueDate?: string;
+  overdueFromDaily?: boolean; // Marked when moved from daily to backlog due to overdue
 }
 
 export interface JobApplication extends BaseItem {
