@@ -1,29 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { Task, Priority } from '../types';
 import { taskService } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 import { PriorityBadge, Card, PageHeader, Modal, Input, Select, TextArea } from './Shared';
 import { Plus, CheckSquare, Square, Trash2, Calendar, Archive, Layers, FileText } from 'lucide-react';
 
 const TaskManager = () => {
+  const { currentUser } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [view, setView] = useState<'DAILY' | 'BACKLOG' | 'ALL'>('DAILY');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Partial<Task>>({});
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates with userId
   useEffect(() => {
-    const unsubscribe = taskService.subscribe(setTasks);
+    if (!currentUser) return;
+    const unsubscribe = taskService.subscribe(currentUser.uid, setTasks);
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
 
   const handleSave = async () => {
+    if (!currentUser) return;
+
+    // Default dueDate to today if not specified
+    const today = new Date().toISOString().split('T')[0];
+
     const baseTask: Omit<Task, 'id'> = {
       title: editingTask.title || 'New Task',
       priority: editingTask.priority || Priority.MEDIUM,
       isDaily: editingTask.isDaily ?? (view === 'DAILY' || view === 'ALL'),
       isCompleted: editingTask.isCompleted || false,
       description: editingTask.description || '',
-      dueDate: editingTask.dueDate || '',
+      dueDate: editingTask.dueDate || today,
+      userId: currentUser.uid,
       createdAt: editingTask.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -31,7 +40,7 @@ const TaskManager = () => {
     if (editingTask.id) {
       await taskService.update(editingTask.id, baseTask);
     } else {
-      await taskService.add(baseTask);
+      await taskService.add(baseTask, currentUser.uid);
     }
     setIsModalOpen(false);
     setEditingTask({});

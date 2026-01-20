@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MasterApplication, Priority, MasterAppType, EnglishReq, DocumentItem } from '../types';
 import { masterService } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 import { PriorityBadge, Card, PageHeader, Modal, Input, Select, TextArea } from './Shared';
 import { Plus, Trash2, BookOpen, CheckCircle, Circle, MapPin, Mail, FileText, X, Check } from 'lucide-react';
 
@@ -14,6 +15,7 @@ const DEFAULT_DOCUMENTS: Omit<DocumentItem, 'id'>[] = [
 ];
 
 const MasterTracker = () => {
+  const { currentUser } = useAuth();
   const [apps, setApps] = useState<MasterApplication[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
@@ -21,9 +23,10 @@ const MasterTracker = () => {
   const [editingApp, setEditingApp] = useState<Partial<MasterApplication>>({});
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates with userId
   useEffect(() => {
-    const unsubscribe = masterService.subscribe((apps) => {
+    if (!currentUser) return;
+    const unsubscribe = masterService.subscribe(currentUser.uid, (apps) => {
       // Normalize documents: ensure all have unique IDs
       const normalizedApps = apps.map(app => ({
         ...app,
@@ -35,9 +38,11 @@ const MasterTracker = () => {
       setApps(normalizedApps);
     });
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
 
   const handleSave = async () => {
+    if (!currentUser) return;
+
     // Ensure all documents have unique IDs
     const documentsWithIds = (editingApp.documents || DEFAULT_DOCUMENTS.map(doc => ({ ...doc, id: crypto.randomUUID() }))).map(doc => ({
       ...doc,
@@ -54,6 +59,7 @@ const MasterTracker = () => {
       englishReq: editingApp.englishReq || EnglishReq.NONE,
       probability: editingApp.probability || 50,
       documents: documentsWithIds,
+      userId: currentUser.uid,
       professorName: editingApp.professorName || '',
       professorEmail: editingApp.professorEmail || '',
       professorContacted: editingApp.professorContacted || false,
@@ -66,7 +72,7 @@ const MasterTracker = () => {
     if (editingApp.id) {
       await masterService.update(editingApp.id, baseApp);
     } else {
-      await masterService.add(baseApp);
+      await masterService.add(baseApp, currentUser.uid);
     }
     setIsModalOpen(false);
     setEditingApp({});

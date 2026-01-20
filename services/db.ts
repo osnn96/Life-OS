@@ -6,6 +6,7 @@ import {
   doc, 
   onSnapshot,
   query,
+  where,
   Timestamp,
   DocumentData,
   QuerySnapshot
@@ -31,17 +32,20 @@ const COLLECTIONS = {
   ERASMUS: 'erasmus',
 };
 
-// Generic Firestore Service with Real-time Updates
-class FirestoreService<T extends { id: string }> {
+// Generic Firestore Service with Real-time Updates and User Isolation
+class FirestoreService<T extends { id: string; userId: string }> {
   private collectionName: string;
 
   constructor(collectionName: string) {
     this.collectionName = collectionName;
   }
 
-  // Subscribe to real-time updates
-  subscribe(callback: (items: T[]) => void): () => void {
-    const q = query(collection(db, this.collectionName));
+  // Subscribe to real-time updates for current user only
+  subscribe(userId: string, callback: (items: T[]) => void): () => void {
+    const q = query(
+      collection(db, this.collectionName),
+      where('userId', '==', userId)
+    );
     
     const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
       const items: T[] = snapshot.docs.map(doc => ({
@@ -56,11 +60,12 @@ class FirestoreService<T extends { id: string }> {
     return unsubscribe;
   }
 
-  // Add new item
-  async add(item: Omit<T, 'id'>): Promise<void> {
+  // Add new item with userId
+  async add(item: Omit<T, 'id'>, userId: string): Promise<void> {
     try {
       await addDoc(collection(db, this.collectionName), {
         ...item,
+        userId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });

@@ -1,21 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { ErasmusInternship, Priority, ErasmusStatus } from '../types';
 import { erasmusService } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 import { PriorityBadge, Card, PageHeader, Modal, Input, Select, TextArea, StatusBadge } from './Shared';
 import { Plus, Trash2, Globe, Banknote } from 'lucide-react';
 
 const ErasmusTracker = () => {
+  const { currentUser } = useAuth();
   const [items, setItems] = useState<ErasmusInternship[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<ErasmusInternship>>({});
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates with userId
   useEffect(() => {
-    const unsubscribe = erasmusService.subscribe(setItems);
+    if (!currentUser) return;
+    const unsubscribe = erasmusService.subscribe(currentUser.uid, setItems);
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
 
   const handleSave = async () => {
+    if (!currentUser) return;
+
     const baseItem: Omit<ErasmusInternship, 'id'> = {
       company: editingItem.company || 'Unknown',
       role: editingItem.role || 'Intern',
@@ -26,6 +31,7 @@ const ErasmusTracker = () => {
       contactNotes: editingItem.contactNotes || '',
       visaRequired: editingItem.visaRequired || false,
       grantAmount: editingItem.grantAmount || '',
+      userId: currentUser.uid,
       createdAt: editingItem.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -33,7 +39,7 @@ const ErasmusTracker = () => {
     if (editingItem.id) {
       await erasmusService.update(editingItem.id, baseItem);
     } else {
-      await erasmusService.add(baseItem);
+      await erasmusService.add(baseItem, currentUser.uid);
     }
     setIsModalOpen(false);
     setEditingItem({});

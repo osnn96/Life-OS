@@ -38,6 +38,7 @@ export enum ErasmusStatus {
 
 export interface BaseItem {
   id: string;
+  userId: string; // User who owns this item
   createdAt: string;
   updatedAt: string;
   priority: Priority;

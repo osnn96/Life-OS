@@ -6,10 +6,12 @@ import {
   GraduationCap, 
   Plane, 
   Menu,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 import { AppView, Priority, Task, JobApplication, MasterApplication } from './types';
 import { taskService, jobService, masterService } from './services/db';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Module Imports
 import TaskManager from './components/TaskManager';
@@ -17,10 +19,12 @@ import JobTracker from './components/JobTracker';
 import MasterTracker from './components/MasterTracker';
 import ErasmusTracker from './components/ErasmusTracker';
 import CalendarWidget from './components/CalendarWidget';
+import Auth from './components/Auth';
 import { Card, PriorityBadge } from './components/Shared';
 
 // Dashboard Summary Component
 const DashboardHome = ({ setView }: { setView: (v: AppView) => void }) => {
+  const { currentUser } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [jobs, setJobs] = useState<JobApplication[]>([]);
   const [masters, setMasters] = useState<MasterApplication[]>([]);
@@ -32,18 +36,20 @@ const DashboardHome = ({ setView }: { setView: (v: AppView) => void }) => {
     upcomingDeadlines: 0
   });
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates with userId
   useEffect(() => {
-    const unsubscribeTasks = taskService.subscribe(setTasks);
-    const unsubscribeJobs = jobService.subscribe(setJobs);
-    const unsubscribeMasters = masterService.subscribe(setMasters);
+    if (!currentUser) return;
+
+    const unsubscribeTasks = taskService.subscribe(currentUser.uid, setTasks);
+    const unsubscribeJobs = jobService.subscribe(currentUser.uid, setJobs);
+    const unsubscribeMasters = masterService.subscribe(currentUser.uid, setMasters);
 
     return () => {
       unsubscribeTasks();
       unsubscribeJobs();
       unsubscribeMasters();
     };
-  }, []);
+  }, [currentUser]);
 
   // Update stats whenever data changes
   useEffect(() => {
@@ -117,8 +123,22 @@ const DashboardHome = ({ setView }: { setView: (v: AppView) => void }) => {
 };
 
 const App = () => {
+  const { currentUser, logout } = useAuth();
   const [currentView, setCurrentView] = useState<AppView>('DASHBOARD');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  // If not logged in, show Auth page
+  if (!currentUser) {
+    return <Auth />;
+  }
 
   const NavItem = ({ view, label, icon: Icon }: { view: AppView, label: string, icon: any }) => (
     <button 
@@ -145,7 +165,19 @@ const App = () => {
           <NavItem view="MASTERS" label="Master's Apps" icon={GraduationCap} />
           <NavItem view="ERASMUS" label="Erasmus" icon={Plane} />
         </nav>
-        <div className="text-xs text-slate-600 px-4">v2.0.0 Firebase Sync</div>
+        <div className="border-t border-slate-800 pt-4 mt-auto">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+          >
+            <LogOut size={20} />
+            <span>Logout</span>
+          </button>
+          <div className="text-xs text-slate-600 px-4 mt-2">
+            {currentUser?.displayName || currentUser?.email}
+          </div>
+        </div>
+        <div className="text-xs text-slate-600 px-4 py-2">v1.1.0 Multi-User</div>
       </aside>
 
       {/* Mobile Header */}
@@ -154,9 +186,18 @@ const App = () => {
            <div className="w-6 h-6 bg-gradient-to-tr from-blue-500 to-purple-500 rounded"></div>
            <span className="font-bold text-white">LifeOS</span>
         </div>
-        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-          {mobileMenuOpen ? <X /> : <Menu />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleLogout}
+            className="p-2 text-slate-400 hover:text-white transition-colors"
+            title="Logout"
+          >
+            <LogOut size={20} />
+          </button>
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <X /> : <Menu />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Menu Overlay */}
@@ -182,4 +223,11 @@ const App = () => {
   );
 };
 
-export default App;
+// Wrap App with AuthProvider
+const AppWithAuth = () => (
+  <AuthProvider>
+    <App />
+  </AuthProvider>
+);
+
+export default AppWithAuth;

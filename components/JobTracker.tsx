@@ -1,21 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { JobApplication, Priority, JobStatus } from '../types';
 import { jobService } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 import { PriorityBadge, Card, PageHeader, Modal, Input, Select, TextArea, StatusBadge } from './Shared';
 import { Plus, Trash2, ExternalLink, RefreshCw } from 'lucide-react';
 
 const JobTracker = () => {
+  const { currentUser } = useAuth();
   const [jobs, setJobs] = useState<JobApplication[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Partial<JobApplication>>({});
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates with userId
   useEffect(() => {
-    const unsubscribe = jobService.subscribe(setJobs);
+    if (!currentUser) return;
+    const unsubscribe = jobService.subscribe(currentUser.uid, setJobs);
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
 
   const handleSave = async () => {
+    if (!currentUser) return;
+
     const baseJob: Omit<JobApplication, 'id'> = {
       company: editingJob.company || 'Unknown Company',
       position: editingJob.position || 'Unknown Role',
@@ -25,6 +30,7 @@ const JobTracker = () => {
       hrContactName: editingJob.hrContactName || '',
       hrContactLink: editingJob.hrContactLink || '',
       notes: editingJob.notes || '',
+      userId: currentUser.uid,
       createdAt: editingJob.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -32,7 +38,7 @@ const JobTracker = () => {
     if (editingJob.id) {
       await jobService.update(editingJob.id, baseJob);
     } else {
-      await jobService.add(baseJob);
+      await jobService.add(baseJob, currentUser.uid);
     }
     
     setIsModalOpen(false);

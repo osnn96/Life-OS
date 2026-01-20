@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { taskService, masterService } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 import { Task, MasterApplication, Priority } from '../types';
 import { Clock, AlertCircle } from 'lucide-react';
 
 const CalendarWidget = () => {
+  const { currentUser } = useAuth();
   const [weekDays, setWeekDays] = useState<Date[]>([]);
   const [events, setEvents] = useState<{ tasks: Task[], masters: MasterApplication[] }>({ tasks: [], masters: [] });
 
   useEffect(() => {
+    if (!currentUser) return;
+
     // 1. Calculate the sliding 7-day window starting from TODAY
     const today = new Date();
     const days = Array.from({ length: 7 }, (_, i) => {
@@ -17,11 +21,11 @@ const CalendarWidget = () => {
     });
     setWeekDays(days);
 
-    // 2. Subscribe to real-time updates
-    const unsubscribeTasks = taskService.subscribe((tasks) => {
+    // 2. Subscribe to real-time updates with userId
+    const unsubscribeTasks = taskService.subscribe(currentUser.uid, (tasks) => {
       setEvents(prev => ({ ...prev, tasks }));
     });
-    const unsubscribeMasters = masterService.subscribe((masters) => {
+    const unsubscribeMasters = masterService.subscribe(currentUser.uid, (masters) => {
       setEvents(prev => ({ ...prev, masters }));
     });
 
@@ -29,7 +33,7 @@ const CalendarWidget = () => {
       unsubscribeTasks();
       unsubscribeMasters();
     };
-  }, []);
+  }, [currentUser]);
 
   const getDayEvents = (date: Date) => {
     // Format date to YYYY-MM-DD to match input[type="date"] values
