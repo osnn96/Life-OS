@@ -63,7 +63,8 @@ const TaskManager = () => {
     setIsModalOpen(true);
   };
 
-  const today = new Date().toISOString().split('T')[0];
+  // Get today's date for filtering upcoming tasks
+  const today = React.useMemo(() => new Date().toISOString().split('T')[0], []);
   
   const filteredTasks = tasks.filter(t => {
     if (view === 'ALL') return true;
