@@ -420,6 +420,13 @@ const MasterTracker = () => {
             options={[{value: 'true', label: 'Contacted'}, {value: 'false', label: 'Not Yet'}]}
           />
 
+        <TextArea 
+          label="Additional Notes" 
+          value={editingApp.notes || ''} 
+          onChange={e => setEditingApp({...editingApp, notes: e.target.value})}
+          placeholder="Any special requirements, deadlines, or notes about this application..."
+        />
+
         <div className="mt-4 flex justify-end">
           <button onClick={handleSave} className="bg-primary text-white px-4 py-2 rounded-lg font-medium">Save Application</button>
         </div>
