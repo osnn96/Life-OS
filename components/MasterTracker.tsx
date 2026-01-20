@@ -267,6 +267,18 @@ const MasterTracker = () => {
                   {app.professorEmail && <div className="text-slate-500 flex items-center gap-1"><Mail size={12}/> {app.professorEmail}</div>}
                 </div>
               )}
+
+              {/* Additional Notes */}
+              {app.notes && (
+                <div className="mt-3 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 text-sm">
+                  <div className="font-semibold text-slate-300 mb-1 flex items-center gap-1">
+                    <FileText size={12}/> Notes
+                  </div>
+                  <p className="text-slate-400 text-xs leading-relaxed">
+                    {app.notes}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Right: Document Summary Button */}
