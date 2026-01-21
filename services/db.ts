@@ -9,7 +9,8 @@ import {
   where,
   Timestamp,
   DocumentData,
-  QuerySnapshot
+  QuerySnapshot,
+  deleteField
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { 
@@ -79,10 +80,20 @@ class FirestoreService<T extends { id: string; userId: string }> {
   async update(id: string, updates: Partial<T>): Promise<void> {
     try {
       const docRef = doc(db, this.collectionName, id);
-      await updateDoc(docRef, {
-        ...updates,
-        updatedAt: new Date().toISOString()
+      
+      // Process updates: convert undefined values to deleteField()
+      const processedUpdates: any = { updatedAt: new Date().toISOString() };
+      
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') {
+          // Delete the field from Firestore if value is empty
+          processedUpdates[key] = deleteField();
+        } else {
+          processedUpdates[key] = value;
+        }
       });
+      
+      await updateDoc(docRef, processedUpdates);
     } catch (error) {
       console.error(`Error updating ${this.collectionName}:`, error);
       throw error;

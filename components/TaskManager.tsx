@@ -39,33 +39,58 @@ const TaskManager = () => {
   const handleSave = async () => {
     if (!currentUser) return;
 
-    // Default dueDate to today if not specified
-    const today = new Date().toISOString().split('T')[0];
+    try {
+      // Default dueDate to today if not specified
+      const today = new Date().toISOString().split('T')[0];
 
-    const baseTask: Omit<Task, 'id'> = {
-      title: editingTask.title || 'New Task',
-      priority: editingTask.priority || Priority.MEDIUM,
-      isDaily: editingTask.isDaily ?? (view === 'DAILY' || view === 'ALL'),
-      isCompleted: editingTask.isCompleted || false,
-      description: editingTask.description || '',
-      dueDate: editingTask.dueDate || today,
-      isRecurring: editingTask.isRecurring || false,
-      recurrenceType: editingTask.recurrenceType,
-      recurrenceDays: editingTask.recurrenceDays,
-      lastCompletedDate: editingTask.lastCompletedDate,
-      overdueFromDaily: editingTask.overdueFromDaily,
-      userId: currentUser.uid,
-      createdAt: editingTask.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      const baseTask: Omit<Task, 'id'> = {
+        title: editingTask.title || 'New Task',
+        priority: editingTask.priority || Priority.MEDIUM,
+        isDaily: editingTask.isDaily ?? (view === 'DAILY' || view === 'ALL'),
+        isCompleted: editingTask.isCompleted || false,
+        description: editingTask.description || '',
+        isRecurring: editingTask.isRecurring || false,
+        userId: currentUser.uid,
+        createdAt: editingTask.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-    if (editingTask.id) {
-      await taskService.update(editingTask.id, baseTask);
-    } else {
-      await taskService.add(baseTask, currentUser.uid);
+      // Add optional fields
+      if (editingTask.dueDate) {
+        (baseTask as any).dueDate = editingTask.dueDate;
+      } else if (!editingTask.id) {
+        // Only set today for new tasks
+        (baseTask as any).dueDate = today;
+      } else {
+        // For editing: undefined will trigger deleteField in db service
+        (baseTask as any).dueDate = undefined;
+      }
+      
+      if (editingTask.isRecurring && editingTask.recurrenceType) {
+        (baseTask as any).recurrenceType = editingTask.recurrenceType;
+      }
+      if (editingTask.isRecurring && editingTask.recurrenceDays) {
+        (baseTask as any).recurrenceDays = editingTask.recurrenceDays;
+      }
+      if (editingTask.lastCompletedDate) {
+        (baseTask as any).lastCompletedDate = editingTask.lastCompletedDate;
+      }
+      if (editingTask.overdueFromDaily) {
+        (baseTask as any).overdueFromDaily = editingTask.overdueFromDaily;
+      }
+
+      if (editingTask.id) {
+        await taskService.update(editingTask.id, baseTask);
+      } else {
+        await taskService.add(baseTask, currentUser.uid);
+      }
+      
+      setIsModalOpen(false);
+      setEditingTask({});
+    } catch (error) {
+      console.error('Error saving task:', error);
+      alert('Failed to save task. Please try again.');
     }
-    setIsModalOpen(false);
-    setEditingTask({});
   };
 
   const toggleComplete = async (e: React.MouseEvent, task: Task) => {
@@ -354,7 +379,7 @@ const TaskManager = () => {
                 ]}
               />
               {editingTask.recurrenceType === 'weekdays' && (
-                <div className="mt-2">
+                <div className="mt-2 mb-4">
                   <label className="text-xs text-slate-400 font-semibold uppercase mb-2 block">Select Days</label>
                   <div className="flex flex-wrap gap-2">
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
@@ -390,8 +415,23 @@ const TaskManager = () => {
           value={editingTask.description || ''}
           onChange={e => setEditingTask({...editingTask, description: e.target.value})}
         />
-        <div className="mt-4 flex justify-end">
-          <button type="button" onClick={handleSave} className="bg-primary text-white px-4 py-2 rounded-lg font-medium">
+        <div className="mt-4 flex justify-end gap-2">
+          <button 
+            type="button" 
+            onClick={() => { setIsModalOpen(false); setEditingTask({}); }}
+            className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-medium"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSave();
+            }}
+            className="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium"
+          >
             Save Task
           </button>
         </div>
