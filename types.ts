@@ -52,7 +52,8 @@ export interface Task extends BaseItem {
   dueDate?: string;
   overdueFromDaily?: boolean; // Marked when moved from daily to backlog due to overdue
   isRecurring?: boolean;
-  recurrenceType?: 'weekly' | 'monthly';
+  recurrenceType?: 'daily' | 'weekly' | 'monthly' | 'weekdays'; // weekdays = specific days of week
+  recurrenceDays?: number[]; // For weekdays: [0,1,2,3,4,5,6] = Sun-Sat
   lastCompletedDate?: string; // Track when last completed for recurring tasks
 }
 

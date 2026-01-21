@@ -51,6 +51,7 @@ const TaskManager = () => {
       dueDate: editingTask.dueDate || today,
       isRecurring: editingTask.isRecurring || false,
       recurrenceType: editingTask.recurrenceType,
+      recurrenceDays: editingTask.recurrenceDays,
       lastCompletedDate: editingTask.lastCompletedDate,
       overdueFromDaily: editingTask.overdueFromDaily,
       userId: currentUser.uid,
@@ -72,14 +73,34 @@ const TaskManager = () => {
     
     // If task is recurring and being marked complete
     if (task.isRecurring && !task.isCompleted) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
       
-      // Calculate next due date
+      // Calculate next due date based on recurrence type
       let nextDueDate = new Date();
-      if (task.recurrenceType === 'weekly') {
+      
+      if (task.recurrenceType === 'daily') {
+        nextDueDate.setDate(nextDueDate.getDate() + 1);
+      } else if (task.recurrenceType === 'weekly') {
         nextDueDate.setDate(nextDueDate.getDate() + 7);
       } else if (task.recurrenceType === 'monthly') {
         nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      } else if (task.recurrenceType === 'weekdays' && task.recurrenceDays?.length) {
+        // Find next occurrence day
+        const currentDay = today.getDay();
+        const sortedDays = [...task.recurrenceDays].sort((a, b) => a - b);
+        
+        // Find next day in the week
+        let nextDay = sortedDays.find(day => day > currentDay);
+        
+        // If no day found this week, use first day next week
+        if (nextDay === undefined) {
+          nextDay = sortedDays[0];
+          const daysToAdd = (7 - currentDay) + nextDay;
+          nextDueDate.setDate(nextDueDate.getDate() + daysToAdd);
+        } else {
+          nextDueDate.setDate(nextDueDate.getDate() + (nextDay - currentDay));
+        }
       }
       
       // Create new recurring instance
@@ -87,7 +108,7 @@ const TaskManager = () => {
         ...task,
         isCompleted: false,
         dueDate: nextDueDate.toISOString().split('T')[0],
-        lastCompletedDate: today,
+        lastCompletedDate: todayStr,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -223,7 +244,11 @@ const TaskManager = () => {
                        {task.dueDate && <span className="bg-slate-800 px-2 py-0.5 rounded">Due: {task.dueDate}</span>}
                        {task.isRecurring && (
                          <span className="text-[10px] uppercase tracking-wider font-bold text-blue-400 bg-blue-500/20 border border-blue-500/50 px-2 py-0.5 rounded flex items-center gap-1">
-                           <RefreshCw size={10} /> {task.recurrenceType}
+                           <RefreshCw size={10} /> 
+                           {task.recurrenceType === 'weekdays' && task.recurrenceDays?.length 
+                             ? `${task.recurrenceDays.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d].substring(0,2)).join(',')}`
+                             : task.recurrenceType
+                           }
                          </span>
                        )}
                        {task.overdueFromDaily && (
@@ -316,15 +341,46 @@ const TaskManager = () => {
             Recurring Task
           </label>
           {editingTask.isRecurring && (
-            <Select
-              label="Repeat Every"
-              value={editingTask.recurrenceType || 'weekly'}
-              onChange={e => setEditingTask({...editingTask, recurrenceType: e.target.value as 'weekly' | 'monthly'})}
-              options={[
-                { value: 'weekly', label: 'Weekly' },
-                { value: 'monthly', label: 'Monthly' },
-              ]}
-            />
+            <>
+              <Select
+                label="Repeat Every"
+                value={editingTask.recurrenceType || 'weekly'}
+                onChange={e => setEditingTask({...editingTask, recurrenceType: e.target.value as any})}
+                options={[
+                  { value: 'daily', label: 'Daily' },
+                  { value: 'weekly', label: 'Weekly' },
+                  { value: 'monthly', label: 'Monthly' },
+                  { value: 'weekdays', label: 'Specific Days of Week' },
+                ]}
+              />
+              {editingTask.recurrenceType === 'weekdays' && (
+                <div className="mt-2">
+                  <label className="text-xs text-slate-400 font-semibold uppercase mb-2 block">Select Days</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          const days = editingTask.recurrenceDays || [];
+                          const newDays = days.includes(index)
+                            ? days.filter(d => d !== index)
+                            : [...days, index].sort();
+                          setEditingTask({...editingTask, recurrenceDays: newDays});
+                        }}
+                        className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                          (editingTask.recurrenceDays || []).includes(index)
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
         
@@ -335,7 +391,7 @@ const TaskManager = () => {
           onChange={e => setEditingTask({...editingTask, description: e.target.value})}
         />
         <div className="mt-4 flex justify-end">
-          <button onClick={handleSave} className="bg-primary text-white px-4 py-2 rounded-lg font-medium">
+          <button type="button" onClick={handleSave} className="bg-primary text-white px-4 py-2 rounded-lg font-medium">
             Save Task
           </button>
         </div>
