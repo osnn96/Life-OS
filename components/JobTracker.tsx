@@ -81,6 +81,15 @@ const JobTracker = () => {
                 <StatusBadge status={job.status} color="purple" />
                 <span className="text-xs text-slate-500">{new Date(job.updatedAt).toLocaleDateString()}</span>
               </div>
+              
+              {/* Notes Preview */}
+              {job.notes && (
+                <div className="mt-2 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                  <p className="text-xs text-slate-400 line-clamp-2">
+                    {job.notes}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="mt-4 pt-3 border-t border-slate-700 flex justify-between items-center">

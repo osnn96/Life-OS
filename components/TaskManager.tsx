@@ -3,12 +3,12 @@ import { Task, Priority } from '../types';
 import { taskService } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { PriorityBadge, Card, PageHeader, Modal, Input, Select, TextArea } from './Shared';
-import { Plus, CheckSquare, Square, Trash2, Calendar, Archive, Layers, FileText } from 'lucide-react';
+import { Plus, CheckSquare, Square, Trash2, Calendar, Archive, Layers, FileText, RefreshCw } from 'lucide-react';
 
 const TaskManager = () => {
   const { currentUser } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [view, setView] = useState<'DAILY' | 'BACKLOG' | 'UPCOMING' | 'ALL'>('DAILY');
+  const [view, setView] = useState<'DAILY' | 'BACKLOG' | 'UPCOMING' | 'DONE' | 'ALL'>('DAILY');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Partial<Task>>({});
 
@@ -49,6 +49,10 @@ const TaskManager = () => {
       isCompleted: editingTask.isCompleted || false,
       description: editingTask.description || '',
       dueDate: editingTask.dueDate || today,
+      isRecurring: editingTask.isRecurring || false,
+      recurrenceType: editingTask.recurrenceType,
+      lastCompletedDate: editingTask.lastCompletedDate,
+      overdueFromDaily: editingTask.overdueFromDaily,
       userId: currentUser.uid,
       createdAt: editingTask.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -65,6 +69,32 @@ const TaskManager = () => {
 
   const toggleComplete = async (e: React.MouseEvent, task: Task) => {
     e.stopPropagation(); // Prevent opening modal
+    
+    // If task is recurring and being marked complete
+    if (task.isRecurring && !task.isCompleted) {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Calculate next due date
+      let nextDueDate = new Date();
+      if (task.recurrenceType === 'weekly') {
+        nextDueDate.setDate(nextDueDate.getDate() + 7);
+      } else if (task.recurrenceType === 'monthly') {
+        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      }
+      
+      // Create new recurring instance
+      const newTask: Omit<Task, 'id'> = {
+        ...task,
+        isCompleted: false,
+        dueDate: nextDueDate.toISOString().split('T')[0],
+        lastCompletedDate: today,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      
+      await taskService.add(newTask, task.userId);
+    }
+    
     await taskService.update(task.id, { isCompleted: !task.isCompleted });
   };
 
@@ -85,15 +115,20 @@ const TaskManager = () => {
   
   const filteredTasks = tasks.filter(t => {
     if (view === 'ALL') return true;
-    if (view === 'DAILY') return t.isDaily;
-    if (view === 'BACKLOG') return !t.isDaily;
+    if (view === 'DAILY') return t.isDaily && !t.isCompleted; // Exclude completed from daily
+    if (view === 'BACKLOG') return !t.isDaily && !t.isCompleted;
     if (view === 'UPCOMING') {
       // Show tasks with due date in the future
-      return t.dueDate && t.dueDate > today;
+      return t.dueDate && t.dueDate > today && !t.isCompleted;
     }
+    if (view === 'DONE') return t.isCompleted;
     return true;
   }).sort((a, b) => {
-    // Sort completed to bottom
+    // For DONE view, sort by updated date (completion date)
+    if (view === 'DONE') {
+      return b.updatedAt.localeCompare(a.updatedAt); // Newest first
+    }
+    // Sort completed to bottom (for non-DONE views)
     if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
     // For upcoming view, sort by due date
     if (view === 'UPCOMING' && a.dueDate && b.dueDate) {
@@ -107,7 +142,7 @@ const TaskManager = () => {
   return (
     <div className="p-4 md:p-8 animate-in fade-in">
       <PageHeader 
-        title={view === 'DAILY' ? "Today's Focus" : view === 'BACKLOG' ? "Backlog" : view === 'UPCOMING' ? "Upcoming Tasks" : "All Tasks"} 
+        title={view === 'DAILY' ? "Today's Focus" : view === 'BACKLOG' ? "Backlog" : view === 'UPCOMING' ? "Upcoming Tasks" : view === 'DONE' ? "Done Tasks" : "All Tasks"} 
         action={
           <button 
             onClick={() => { setEditingTask({}); setIsModalOpen(true); }}
@@ -119,7 +154,7 @@ const TaskManager = () => {
       />
 
       {/* Filter Tabs */}
-      <div className="flex p-1 bg-slate-900 rounded-lg mb-6 w-full max-w-2xl border border-slate-800">
+      <div className="flex p-1 bg-slate-900 rounded-lg mb-6 w-full max-w-3xl border border-slate-800">
         <button 
           onClick={() => setView('DAILY')}
           className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all ${view === 'DAILY' ? 'bg-surface text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
@@ -139,10 +174,16 @@ const TaskManager = () => {
           <Archive size={14} /> Backlog
         </button>
         <button 
+          onClick={() => setView('DONE')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all ${view === 'DONE' ? 'bg-surface text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+        >
+          <CheckSquare size={14} /> Done
+        </button>
+        <button 
           onClick={() => setView('ALL')}
           className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all ${view === 'ALL' ? 'bg-surface text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
         >
-          <Layers size={14} /> All Tasks
+          <Layers size={14} /> All
         </button>
       </div>
 
@@ -180,6 +221,11 @@ const TaskManager = () => {
                           <PriorityBadge priority={task.priority} />
                        </div>
                        {task.dueDate && <span className="bg-slate-800 px-2 py-0.5 rounded">Due: {task.dueDate}</span>}
+                       {task.isRecurring && (
+                         <span className="text-[10px] uppercase tracking-wider font-bold text-blue-400 bg-blue-500/20 border border-blue-500/50 px-2 py-0.5 rounded flex items-center gap-1">
+                           <RefreshCw size={10} /> {task.recurrenceType}
+                         </span>
+                       )}
                        {task.overdueFromDaily && (
                          <span className="text-[10px] uppercase tracking-wider font-bold text-orange-400 bg-orange-500/20 border border-orange-500/50 px-2 py-0.5 rounded animate-pulse">
                            NOT COMPLETED
@@ -256,8 +302,32 @@ const TaskManager = () => {
           label="Due Date (Optional)" 
           type="date"
           value={editingTask.dueDate || ''}
-          onChange={e => setEditingTask({...editingTask, dueDate: e.target.value})}
+          onChange={e => setEditingTask({...editingTask, dueDate: e.target.value || undefined})}
         />
+        
+        <div className="border-t border-slate-700 pt-3 mt-3">
+          <label className="flex items-center gap-2 text-sm text-slate-300 mb-2">
+            <input
+              type="checkbox"
+              checked={editingTask.isRecurring || false}
+              onChange={e => setEditingTask({...editingTask, isRecurring: e.target.checked, recurrenceType: e.target.checked ? 'weekly' : undefined})}
+              className="rounded"
+            />
+            Recurring Task
+          </label>
+          {editingTask.isRecurring && (
+            <Select
+              label="Repeat Every"
+              value={editingTask.recurrenceType || 'weekly'}
+              onChange={e => setEditingTask({...editingTask, recurrenceType: e.target.value as 'weekly' | 'monthly'})}
+              options={[
+                { value: 'weekly', label: 'Weekly' },
+                { value: 'monthly', label: 'Monthly' },
+              ]}
+            />
+          )}
+        </div>
+        
         <TextArea
           label="Notes / Description"
           placeholder="Add extra details here..."

@@ -51,6 +51,9 @@ export interface Task extends BaseItem {
   isCompleted: boolean;
   dueDate?: string;
   overdueFromDaily?: boolean; // Marked when moved from daily to backlog due to overdue
+  isRecurring?: boolean;
+  recurrenceType?: 'weekly' | 'monthly';
+  lastCompletedDate?: string; // Track when last completed for recurring tasks
 }
 
 export interface JobApplication extends BaseItem {
