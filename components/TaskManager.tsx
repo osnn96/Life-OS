@@ -191,7 +191,12 @@ const TaskManager = () => {
         title={view === 'DAILY' ? "Today's Focus" : view === 'BACKLOG' ? "Backlog" : view === 'UPCOMING' ? "Upcoming Tasks" : view === 'DONE' ? "Done Tasks" : "All Tasks"} 
         action={
           <button 
-            onClick={() => { setEditingTask({}); setIsModalOpen(true); }}
+            onClick={() => { 
+              // Set dueDate to today for new tasks in DAILY view
+              const initialTask = view === 'DAILY' ? { dueDate: new Date().toISOString().split('T')[0] } : {};
+              setEditingTask(initialTask); 
+              setIsModalOpen(true); 
+            }}
             className="bg-primary hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2"
           >
             <Plus size={16} /> Add Task
