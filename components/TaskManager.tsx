@@ -161,8 +161,10 @@ const TaskManager = () => {
   
   const filteredTasks = tasks.filter(t => {
     if (view === 'ALL') return true;
-    if (view === 'DAILY') return t.isDaily && !t.isCompleted; // Exclude completed from daily
-    if (view === 'BACKLOG') return !t.isDaily && !t.isCompleted;
+    // DAILY: Show tasks due today (regardless of isDaily flag)
+    if (view === 'DAILY') return !t.isCompleted && t.dueDate === today;
+    // BACKLOG: Show tasks without due date or isDaily=false
+    if (view === 'BACKLOG') return !t.isCompleted && (!t.dueDate || !t.isDaily);
     if (view === 'UPCOMING') {
       // Show tasks with due date in the future
       return t.dueDate && t.dueDate > today && !t.isCompleted;
