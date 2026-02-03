@@ -13,6 +13,7 @@ export enum JobStatus {
   MESSAGE_SENT = 'Message Sent',
   ASSESSMENT = 'Assessment',
   RESULT = 'Result',
+  REJECTED = 'Rejected',
 }
 
 export enum MasterAppType {
@@ -89,6 +90,8 @@ export interface MasterApplication extends BaseItem {
   professorContacted: boolean;
   contactBoxOpen: boolean; // Have we communicated?
   notes?: string;
+  isDone?: boolean; // Whether application is completed (accepted/rejected)
+  isRejected?: boolean; // Whether application was rejected
 }
 
 export interface ErasmusInternship extends BaseItem {

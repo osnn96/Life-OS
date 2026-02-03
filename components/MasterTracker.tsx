@@ -214,6 +214,23 @@ const MasterTracker = () => {
     }));
   };
 
+  // Separate apps into active, done (accepted), and rejected
+  const activeApps = apps.filter(app => !app.isDone);
+  const doneApps = apps.filter(app => app.isDone && !app.isRejected);
+  const rejectedApps = apps.filter(app => app.isDone && app.isRejected);
+
+  // Toggle done status
+  const toggleDoneStatus = async (appId: string, isRejected: boolean = false) => {
+    const app = apps.find(a => a.id === appId);
+    if (!app) return;
+
+    await masterService.update(appId, {
+      isDone: !app.isDone,
+      isRejected: isRejected,
+      updatedAt: new Date().toISOString()
+    });
+  };
+
   return (
     <div className="p-4 md:p-8 animate-in fade-in">
       <PageHeader 
@@ -233,8 +250,10 @@ const MasterTracker = () => {
         }
       />
 
-      <div className="space-y-4">
-        {apps.map(app => (
+      {/* Active Applications */}
+      <h2 className="text-xl font-bold text-white mb-4">Active Applications</h2>
+      <div className="space-y-4 mb-8">
+        {activeApps.map(app => (
           <Card key={app.id} className="flex flex-col md:flex-row gap-6">
             {/* Left: Info */}
             <div className="flex-1 space-y-2">
@@ -317,14 +336,130 @@ const MasterTracker = () => {
               <button onClick={() => { setEditingApp(app); setIsModalOpen(true); }} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-200">
                 Edit
               </button>
+              <button 
+                onClick={() => toggleDoneStatus(app.id, false)}
+                className="p-2 bg-green-900/20 hover:bg-green-900/40 rounded text-green-400 text-xs"
+                title="Mark as Done (Accepted)"
+              >
+                ✓ Done
+              </button>
+              <button 
+                onClick={() => toggleDoneStatus(app.id, true)}
+                className="p-2 bg-red-900/20 hover:bg-red-900/40 rounded text-red-400 text-xs"
+                title="Mark as Rejected"
+              >
+                ✗ Rejected
+              </button>
               <button onClick={() => deleteApp(app.id)} className="p-2 bg-red-900/20 hover:bg-red-900/40 rounded text-red-400">
                 <Trash2 size={16} />
               </button>
             </div>
           </Card>
         ))}
-        {apps.length === 0 && <div className="text-center text-slate-500 py-10">No applications tracked.</div>}
+        {activeApps.length === 0 && <div className="text-center text-slate-500 py-10">No active applications tracked.</div>}
       </div>
+
+      {/* Done/Accepted Applications */}
+      {doneApps.length > 0 && (
+        <>
+          <h2 className="text-xl font-bold text-green-400 mb-4 mt-8">Done Applications</h2>
+          <div className="space-y-4 mb-8">
+            {doneApps.map(app => (
+              <Card key={app.id} className="flex flex-col md:flex-row gap-6 opacity-70 border-green-500/30">
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        {app.university}
+                        <span className="text-green-400 text-sm">✓ Done</span>
+                      </h3>
+                      <p className="text-blue-400 font-medium">{app.program}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-4 text-sm text-slate-400 mt-2">
+                    <span className="flex items-center gap-1"><MapPin size={14}/> {app.location}</span>
+                    <span className="flex items-center gap-1 text-slate-200 bg-slate-800 px-2 rounded">Type: {app.type}</span>
+                  </div>
+
+                  {app.notes && (
+                    <div className="mt-3 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 text-sm">
+                      <p className="text-slate-400 text-xs">{app.notes}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 justify-start border-l border-slate-700 pl-4">
+                  <button onClick={() => { setEditingApp(app); setIsModalOpen(true); }} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 text-xs">
+                    Edit
+                  </button>
+                  <button 
+                    onClick={() => toggleDoneStatus(app.id, false)}
+                    className="p-2 bg-yellow-900/20 hover:bg-yellow-900/40 rounded text-yellow-400 text-xs"
+                    title="Move back to Active"
+                  >
+                    ↺ Active
+                  </button>
+                  <button onClick={() => deleteApp(app.id)} className="p-2 bg-red-900/20 hover:bg-red-900/40 rounded text-red-400">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Rejected Applications */}
+      {rejectedApps.length > 0 && (
+        <>
+          <h2 className="text-xl font-bold text-red-400 mb-4 mt-8">Rejected Applications</h2>
+          <div className="space-y-4 mb-8">
+            {rejectedApps.map(app => (
+              <Card key={app.id} className="flex flex-col md:flex-row gap-6 opacity-60 border-red-500/30">
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        {app.university}
+                        <span className="text-red-400 text-sm">✗ Rejected</span>
+                      </h3>
+                      <p className="text-blue-400 font-medium">{app.program}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-4 text-sm text-slate-400 mt-2">
+                    <span className="flex items-center gap-1"><MapPin size={14}/> {app.location}</span>
+                    <span className="flex items-center gap-1 text-slate-200 bg-slate-800 px-2 rounded">Type: {app.type}</span>
+                  </div>
+
+                  {app.notes && (
+                    <div className="mt-3 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 text-sm">
+                      <p className="text-slate-400 text-xs">{app.notes}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 justify-start border-l border-slate-700 pl-4">
+                  <button onClick={() => { setEditingApp(app); setIsModalOpen(true); }} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 text-xs">
+                    Edit
+                  </button>
+                  <button 
+                    onClick={() => toggleDoneStatus(app.id, false)}
+                    className="p-2 bg-yellow-900/20 hover:bg-yellow-900/40 rounded text-yellow-400 text-xs"
+                    title="Move back to Active"
+                  >
+                    ↺ Active
+                  </button>
+                  <button onClick={() => deleteApp(app.id)} className="p-2 bg-red-900/20 hover:bg-red-900/40 rounded text-red-400">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Add/Edit Application Modal */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Master's Application">

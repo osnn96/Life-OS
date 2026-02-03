@@ -51,6 +51,10 @@ const JobTracker = () => {
     }
   };
 
+  // Separate active and rejected jobs
+  const activeJobs = jobs.filter(job => job.status !== JobStatus.REJECTED);
+  const rejectedJobs = jobs.filter(job => job.status === JobStatus.REJECTED);
+
   return (
     <div className="p-4 md:p-8 animate-in fade-in">
       <PageHeader 
@@ -65,8 +69,10 @@ const JobTracker = () => {
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {jobs.map(job => (
+      {/* Active Applications */}
+      <h2 className="text-xl font-bold text-white mb-4">Active Applications</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {activeJobs.map(job => (
           <Card key={job.id} className="relative group">
             <div className="flex justify-between items-start mb-2">
               <div>
@@ -105,8 +111,55 @@ const JobTracker = () => {
             </div>
           </Card>
         ))}
-        {jobs.length === 0 && <div className="col-span-full text-center text-slate-500 py-10">No job applications tracked yet.</div>}
+        {activeJobs.length === 0 && <div className="col-span-full text-center text-slate-500 py-10">No active job applications tracked yet.</div>}
       </div>
+
+      {/* Rejected Applications */}
+      {rejectedJobs.length > 0 && (
+        <>
+          <h2 className="text-xl font-bold text-white mb-4 mt-8">Rejected Applications</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {rejectedJobs.map(job => (
+              <Card key={job.id} className="relative group opacity-60">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className="font-bold text-lg text-white">{job.company}</h3>
+                    <p className="text-slate-400 text-sm">{job.position}</p>
+                  </div>
+                  <PriorityBadge priority={job.priority} />
+                </div>
+                
+                <div className="my-3 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <StatusBadge status={job.status} color="red" />
+                    <span className="text-xs text-slate-500">{new Date(job.updatedAt).toLocaleDateString()}</span>
+                  </div>
+                  
+                  {job.notes && (
+                    <div className="mt-2 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                      <p className="text-xs text-slate-400 line-clamp-2">
+                        {job.notes}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-700 flex justify-between items-center">
+                  {job.link && (
+                    <a href={job.link} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 flex items-center gap-1 text-xs">
+                      <ExternalLink size={12} /> View Job
+                    </a>
+                  )}
+                  <div className="flex gap-2">
+                    <button onClick={() => { setEditingJob(job); setIsModalOpen(true); }} className="text-slate-400 hover:text-white text-xs uppercase font-semibold">Edit</button>
+                    <button onClick={() => deleteJob(job.id)} className="text-red-400 hover:text-red-300"><Trash2 size={14}/></button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingJob.id ? "Edit Application" : "New Job Application"}>
         <Input label="Company" value={editingJob.company || ''} onChange={e => setEditingJob({...editingJob, company: e.target.value})} />
