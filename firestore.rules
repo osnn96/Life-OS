@@ -14,32 +14,37 @@ service cloud.firestore {
     
     // Tasks collection - users can only access their own tasks
     match /tasks/{taskId} {
-      allow read, write: if isSignedIn() && isOwner(resource.data.userId);
+      allow read: if isSignedIn() && isOwner(resource.data.userId);
       allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.userId);
     }
     
     // Jobs collection - users can only access their own job applications
     match /jobs/{jobId} {
-      allow read, write: if isSignedIn() && isOwner(resource.data.userId);
+      allow read: if isSignedIn() && isOwner(resource.data.userId);
       allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.userId);
     }
     
     // Masters collection - users can only access their own master applications
     match /masters/{masterId} {
-      allow read, write: if isSignedIn() && isOwner(resource.data.userId);
+      allow read: if isSignedIn() && isOwner(resource.data.userId);
       allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.userId);
     }
     
     // Erasmus collection - users can only access their own erasmus internships
     match /erasmus/{erasmusId} {
-      allow read, write: if isSignedIn() && isOwner(resource.data.userId);
+      allow read: if isSignedIn() && isOwner(resource.data.userId);
       allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.userId);
     }
     
     // Links collection - users can only access their own useful links
     match /links/{linkId} {
-      allow read, write: if isSignedIn() && isOwner(resource.data.userId);
+      allow read: if isSignedIn() && isOwner(resource.data.userId);
       allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.userId);
     }
     
     // Deny all other access

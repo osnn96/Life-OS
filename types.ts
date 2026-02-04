@@ -130,5 +130,3 @@ export interface UsefulLink {
 
 // App View Type
 export type AppView = 'DASHBOARD' | 'TASKS' | 'JOBS' | 'MASTERS' | 'ERASMUS' | 'LINKS';
-
-export type AppView = 'DASHBOARD' | 'TASKS' | 'JOBS' | 'MASTERS' | 'ERASMUS';

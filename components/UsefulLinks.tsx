@@ -11,6 +11,7 @@ const UsefulLinks = () => {
   const [selectedCategory, setSelectedCategory] = useState<LinkCategory | 'ALL'>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<Partial<UsefulLink>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   // Subscribe to real-time updates
   useEffect(() => {
@@ -20,26 +21,49 @@ const UsefulLinks = () => {
   }, [currentUser]);
 
   const handleSave = async () => {
-    if (!currentUser) return;
-
-    const baseLink: Omit<UsefulLink, 'id'> = {
-      title: editingLink.title || 'Untitled Link',
-      url: editingLink.url || '',
-      category: editingLink.category || LinkCategory.OTHER,
-      description: editingLink.description || '',
-      userId: currentUser.uid,
-      createdAt: editingLink.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    if (editingLink.id) {
-      await linkService.update(editingLink.id, baseLink);
-    } else {
-      await linkService.add(baseLink, currentUser.uid);
+    if (!currentUser) {
+      alert('You must be logged in to save links');
+      return;
     }
-    
-    setIsModalOpen(false);
-    setEditingLink({});
+
+    // Validation
+    if (!editingLink.title?.trim()) {
+      alert('Please enter a title for the link');
+      return;
+    }
+
+    if (!editingLink.url?.trim()) {
+      alert('Please enter a URL for the link');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      
+      const baseLink: Omit<UsefulLink, 'id'> = {
+        title: editingLink.title.trim(),
+        url: editingLink.url.trim(),
+        category: editingLink.category || LinkCategory.OTHER,
+        description: editingLink.description?.trim() || '',
+        userId: currentUser.uid,
+        createdAt: editingLink.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (editingLink.id) {
+        await linkService.update(editingLink.id, baseLink);
+      } else {
+        await linkService.add(baseLink, currentUser.uid);
+      }
+      
+      setIsModalOpen(false);
+      setEditingLink({});
+    } catch (error) {
+      console.error('Error saving link:', error);
+      alert(`Failed to save link: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const deleteLink = async (id: string) => {
@@ -198,12 +222,22 @@ const UsefulLinks = () => {
           placeholder="Brief description of what this link is about..."
         />
         
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex justify-end gap-2">
           <button 
-            onClick={handleSave} 
-            className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors"
+            type="button"
+            onClick={() => setIsModalOpen(false)} 
+            className="bg-slate-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-slate-600 transition-colors"
+            disabled={isSaving}
           >
-            Save Link
+            Cancel
+          </button>
+          <button 
+            type="button"
+            onClick={handleSave} 
+            className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isSaving}
+          >
+            {isSaving ? 'Saving...' : 'Save Link'}
           </button>
         </div>
       </Modal>
