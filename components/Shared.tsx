@@ -30,13 +30,13 @@ export const StatusBadge = ({ status, color = 'blue' }: { status: string, color?
 };
 
 // --- Layout & Cards ---
-export interface CardProps {
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children?: React.ReactNode;
   className?: string;
 }
 
-export const Card = ({ children, className = '' }: CardProps) => (
-  <div className={`bg-surface border border-slate-700 rounded-xl p-4 shadow-sm ${className}`}>
+export const Card = ({ children, className = '', ...props }: CardProps) => (
+  <div className={`bg-surface border border-slate-700 rounded-xl p-4 shadow-sm ${className}`} {...props}>
     {children}
   </div>
 );
@@ -49,7 +49,7 @@ export const PageHeader = ({ title, action }: { title: string, action?: React.Re
 );
 
 // --- Inputs ---
-interface InputProps extends React.ComponentPropsWithoutRef<'input'> {
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
 }
 export const Input = ({ label, className = '', ...props }: InputProps) => (
@@ -62,7 +62,7 @@ export const Input = ({ label, className = '', ...props }: InputProps) => (
   </div>
 );
 
-interface SelectProps extends React.ComponentPropsWithoutRef<'select'> {
+interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label: string;
   options: { value: string; label: string }[];
 }
@@ -78,7 +78,7 @@ export const Select = ({ label, options, className = '', ...props }: SelectProps
   </div>
 );
 
-interface TextAreaProps extends React.ComponentPropsWithoutRef<'textarea'> {
+interface TextAreaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label: string;
 }
 

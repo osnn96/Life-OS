@@ -11,6 +11,7 @@ const TaskManager = () => {
   const [view, setView] = useState<'DAILY' | 'BACKLOG' | 'UPCOMING' | 'DONE' | 'ALL'>('DAILY');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Partial<Task>>({});
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
   // Subscribe to real-time updates with userId
   useEffect(() => {
@@ -156,6 +157,48 @@ const TaskManager = () => {
     setIsModalOpen(true);
   };
 
+  // Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    setDraggedTaskId(taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    // Add visual feedback
+    (e.target as HTMLElement).style.opacity = '0.5';
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    setDraggedTaskId(null);
+    (e.target as HTMLElement).style.opacity = '1';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetTaskId: string) => {
+    e.preventDefault();
+    
+    if (!draggedTaskId || draggedTaskId === targetTaskId) return;
+
+    // Find the dragged and target tasks
+    const draggedIndex = filteredTasks.findIndex(t => t.id === draggedTaskId);
+    const targetIndex = filteredTasks.findIndex(t => t.id === targetTaskId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    // Reorder the tasks
+    const reorderedTasks = [...filteredTasks];
+    const [draggedTask] = reorderedTasks.splice(draggedIndex, 1);
+    reorderedTasks.splice(targetIndex, 0, draggedTask);
+
+    // Update order for all affected tasks
+    const updates = reorderedTasks.map((task, index) => 
+      taskService.update(task.id, { order: index })
+    );
+
+    await Promise.all(updates);
+  };
+
   // Get today's date for filtering upcoming tasks
   const today = React.useMemo(() => new Date().toISOString().split('T')[0], []);
   
@@ -181,6 +224,10 @@ const TaskManager = () => {
     // For upcoming view, sort by due date
     if (view === 'UPCOMING' && a.dueDate && b.dueDate) {
       return a.dueDate.localeCompare(b.dueDate);
+    }
+    // Sort by custom order if set (for drag & drop)
+    if (a.order !== undefined && b.order !== undefined) {
+      return a.order - b.order;
     }
     // Sort by priority
     const pMap = { [Priority.HIGH]: 0, [Priority.MEDIUM]: 1, [Priority.LOW]: 2 };
@@ -248,11 +295,17 @@ const TaskManager = () => {
           <Card 
             key={task.id} 
             className={`
-              transition-all cursor-pointer hover:border-slate-500 active:scale-[0.99] group
+              transition-all cursor-move hover:border-slate-500 active:scale-[0.99] group
               ${task.isCompleted ? 'opacity-50' : ''}
+              ${draggedTaskId === task.id ? 'opacity-50 scale-95' : ''}
             `}
+            draggable={!task.isCompleted && view !== 'DONE'}
+            onDragStart={(e) => handleDragStart(e, task.id)}
+            onDragEnd={handleDragEnd}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, task.id)}
           >
-            <div onClick={() => openEditModal(task)} className="w-full">
+            <div onClick={() => openEditModal(task)} className="w-full cursor-pointer">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4 flex-1">
                   <button onClick={(e) => toggleComplete(e, task)} className="mt-1 text-slate-400 hover:text-primary transition-colors">

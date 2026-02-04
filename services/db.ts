@@ -17,7 +17,8 @@ import {
   Task, 
   JobApplication, 
   MasterApplication, 
-  ErasmusInternship, 
+  ErasmusInternship,
+  UsefulLink, 
   Priority, 
   JobStatus, 
   MasterAppType, 
@@ -31,6 +32,7 @@ const COLLECTIONS = {
   JOBS: 'jobs',
   MASTERS: 'masters',
   ERASMUS: 'erasmus',
+  LINKS: 'links',
 };
 
 // Generic Firestore Service with Real-time Updates and User Isolation
@@ -117,6 +119,7 @@ export const taskService = new FirestoreService<Task>(COLLECTIONS.TASKS);
 export const jobService = new FirestoreService<JobApplication>(COLLECTIONS.JOBS);
 export const masterService = new FirestoreService<MasterApplication>(COLLECTIONS.MASTERS);
 export const erasmusService = new FirestoreService<ErasmusInternship>(COLLECTIONS.ERASMUS);
+export const linkService = new FirestoreService<UsefulLink>(COLLECTIONS.LINKS);
 
 // Optional: Seed data for testing (run manually in console if needed)
 export const seedData = async () => {

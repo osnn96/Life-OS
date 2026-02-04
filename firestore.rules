@@ -36,6 +36,12 @@ service cloud.firestore {
       allow create: if isSignedIn() && isOwner(request.resource.data.userId);
     }
     
+    // Links collection - users can only access their own useful links
+    match /links/{linkId} {
+      allow read, write: if isSignedIn() && isOwner(resource.data.userId);
+      allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+    }
+    
     // Deny all other access
     match /{document=**} {
       allow read, write: if false;

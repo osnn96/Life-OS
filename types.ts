@@ -35,6 +35,17 @@ export enum ErasmusStatus {
   ACCEPTED = 'Accepted',
 }
 
+export enum LinkCategory {
+  DATA_SCIENCE = 'Data Science',
+  AI = 'AI',
+  FRONTEND = 'Frontend',
+  BACKEND = 'Backend',
+  AI_SERVICES = 'AI Services',
+  TOOLS = 'Tools',
+  LEARNING = 'Learning',
+  OTHER = 'Other',
+}
+
 // Interfaces
 
 export interface BaseItem {
@@ -56,6 +67,7 @@ export interface Task extends BaseItem {
   recurrenceType?: 'daily' | 'weekly' | 'monthly' | 'weekdays'; // weekdays = specific days of week
   recurrenceDays?: number[]; // For weekdays: [0,1,2,3,4,5,6] = Sun-Sat
   lastCompletedDate?: string; // Track when last completed for recurring tasks
+  order?: number; // For drag & drop ordering
 }
 
 export interface JobApplication extends BaseItem {
@@ -104,5 +116,19 @@ export interface ErasmusInternship extends BaseItem {
   visaRequired: boolean;
   grantAmount?: string;
 }
+
+export interface UsefulLink {
+  id: string;
+  userId: string;
+  title: string;
+  url: string;
+  category: LinkCategory;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// App View Type
+export type AppView = 'DASHBOARD' | 'TASKS' | 'JOBS' | 'MASTERS' | 'ERASMUS' | 'LINKS';
 
 export type AppView = 'DASHBOARD' | 'TASKS' | 'JOBS' | 'MASTERS' | 'ERASMUS';

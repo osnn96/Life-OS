@@ -7,7 +7,8 @@ import {
   Plane, 
   Menu,
   X,
-  LogOut
+  LogOut,
+  Link as LinkIcon
 } from 'lucide-react';
 import { AppView, Priority, Task, JobApplication, MasterApplication } from './types';
 import { taskService, jobService, masterService } from './services/db';
@@ -18,6 +19,7 @@ import TaskManager from './components/TaskManager';
 import JobTracker from './components/JobTracker';
 import MasterTracker from './components/MasterTracker';
 import ErasmusTracker from './components/ErasmusTracker';
+import UsefulLinks from './components/UsefulLinks';
 import CalendarWidget from './components/CalendarWidget';
 import Auth from './components/Auth';
 import { Card, PriorityBadge } from './components/Shared';
@@ -164,6 +166,7 @@ const App = () => {
           <NavItem view="JOBS" label="Job Applications" icon={Briefcase} />
           <NavItem view="MASTERS" label="Master's Apps" icon={GraduationCap} />
           <NavItem view="ERASMUS" label="Erasmus" icon={Plane} />
+          <NavItem view="LINKS" label="Useful Links" icon={LinkIcon} />
         </nav>
         <div className="border-t border-slate-800 pt-4 mt-auto">
           <button
@@ -208,6 +211,7 @@ const App = () => {
           <NavItem view="JOBS" label="Job Applications" icon={Briefcase} />
           <NavItem view="MASTERS" label="Master's Apps" icon={GraduationCap} />
           <NavItem view="ERASMUS" label="Erasmus" icon={Plane} />
+          <NavItem view="LINKS" label="Useful Links" icon={LinkIcon} />
         </div>
       )}
 
@@ -218,6 +222,7 @@ const App = () => {
         {currentView === 'JOBS' && <JobTracker />}
         {currentView === 'MASTERS' && <MasterTracker />}
         {currentView === 'ERASMUS' && <ErasmusTracker />}
+        {currentView === 'LINKS' && <UsefulLinks />}
       </main>
     </div>
   );
