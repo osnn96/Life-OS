@@ -35,6 +35,13 @@ export enum ErasmusStatus {
   ACCEPTED = 'Accepted',
 }
 
+export enum ScholarshipStatus {
+  NOT_APPLIED = 'Not Applied',
+  APPLIED = 'Applied',
+  ACCEPTED = 'Accepted',
+  REJECTED = 'Rejected',
+}
+
 export enum LinkCategory {
   DATA_SCIENCE = 'Data Science',
   AI = 'AI',
@@ -92,6 +99,7 @@ export interface MasterApplication extends BaseItem {
   university: string;
   program: string;
   location: string;
+  country?: string; // Extracted from location for grouping
   type: MasterAppType;
   deadline: string;
   documents: DocumentItem[];
@@ -104,6 +112,22 @@ export interface MasterApplication extends BaseItem {
   notes?: string;
   isDone?: boolean; // Whether application is completed (accepted/rejected)
   isRejected?: boolean; // Whether application was rejected
+  scholarshipProgramId?: string; // Link to scholarship program if applicable
+}
+
+export interface ScholarshipProgram extends BaseItem {
+  name: string; // e.g., "Erasmus Mundus Joint Masters in Data Science"
+  type: MasterAppType;
+  description?: string;
+  deadline: string;
+  fundingAmount?: string;
+  documents: DocumentItem[];
+  linkedUniversities: {
+    universityName: string;
+    location: string;
+    status: ScholarshipStatus;
+  }[];
+  notes?: string;
 }
 
 export interface ErasmusInternship extends BaseItem {

@@ -36,14 +36,17 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export const Card = ({ children, className = '', ...props }: CardProps) => (
-  <div className={`bg-surface border border-slate-700 rounded-xl p-4 shadow-sm ${className}`} {...props}>
+  <div className={`bg-slate-800 border border-slate-600/50 rounded-xl p-4 shadow-xl ${className}`} {...props}>
     {children}
   </div>
 );
 
-export const PageHeader = ({ title, action }: { title: string, action?: React.ReactNode }) => (
+export const PageHeader = ({ title, action, icon: Icon }: { title: string, action?: React.ReactNode, icon?: React.ComponentType<any> }) => (
   <div className="flex justify-between items-center mb-6">
-    <h1 className="text-2xl font-bold text-white">{title}</h1>
+    <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+      {Icon && <Icon size={28} />}
+      {title}
+    </h1>
     {action}
   </div>
 );

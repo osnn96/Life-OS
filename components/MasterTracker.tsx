@@ -3,7 +3,11 @@ import { MasterApplication, Priority, MasterAppType, EnglishReq, DocumentItem } 
 import { masterService } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { PriorityBadge, Card, PageHeader, Modal, Input, Select, TextArea } from './Shared';
-import { Plus, Trash2, BookOpen, CheckCircle, Circle, MapPin, Mail, FileText, X, Check } from 'lucide-react';
+import { Plus, Trash2, BookOpen, CheckCircle, Circle, MapPin, Mail, FileText, X, Check, Award, Globe, GraduationCap, ArrowLeft } from 'lucide-react';
+import ScholarshipProgramsView from './ScholarshipProgramsView';
+import CountriesView from './CountriesView';
+
+type MasterViewType = 'SCHOLARSHIPS' | 'COUNTRIES' | 'APPLICATIONS' | null;
 
 // Default document templates
 const DEFAULT_DOCUMENTS: Omit<DocumentItem, 'id'>[] = [
@@ -16,12 +20,20 @@ const DEFAULT_DOCUMENTS: Omit<DocumentItem, 'id'>[] = [
 
 const MasterTracker = () => {
   const { currentUser } = useAuth();
+  const [view, setView] = useState<MasterViewType>(null);
   const [apps, setApps] = useState<MasterApplication[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [selectedApp, setSelectedApp] = useState<MasterApplication | null>(null);
   const [editingApp, setEditingApp] = useState<Partial<MasterApplication>>({});
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
+
+  // Helper function to extract country from location string
+  const extractCountry = (location: string): string => {
+    if (!location) return '';
+    const parts = location.split(',').map(p => p.trim());
+    return parts[parts.length - 1] || '';
+  };
 
   // Subscribe to real-time updates with userId
   useEffect(() => {
@@ -40,6 +52,37 @@ const MasterTracker = () => {
     return () => unsubscribe();
   }, [currentUser]);
 
+  // Auto-migrate country field from location for existing apps
+  useEffect(() => {
+    if (!currentUser || apps.length === 0) return;
+
+    const migrateCountries = async () => {
+      const appsNeedingCountry = apps.filter(app => !app.country && app.location);
+      
+      if (appsNeedingCountry.length === 0) return;
+
+      console.log(`Migrating country field for ${appsNeedingCountry.length} applications...`);
+
+      for (const app of appsNeedingCountry) {
+        const country = extractCountry(app.location || '');
+        if (country) {
+          try {
+            await masterService.update(app.id, {
+              country,
+              updatedAt: new Date().toISOString()
+            });
+          } catch (error) {
+            console.error(`Error migrating country for app ${app.id}:`, error);
+          }
+        }
+      }
+
+      console.log('Country migration completed!');
+    };
+
+    migrateCountries();
+  }, [apps.length, currentUser]); // Only run when apps are first loaded
+
   const handleSave = async () => {
     if (!currentUser) return;
 
@@ -53,6 +96,7 @@ const MasterTracker = () => {
       university: editingApp.university || 'Unknown Uni',
       program: editingApp.program || 'Unknown Program',
       location: editingApp.location || '',
+      country: editingApp.country || extractCountry(editingApp.location || ''),
       type: editingApp.type || MasterAppType.NON_SCHOLARSHIP,
       deadline: editingApp.deadline || '',
       priority: editingApp.priority || Priority.MEDIUM,
@@ -231,8 +275,114 @@ const MasterTracker = () => {
     });
   };
 
+  // Hero View: Navigation Cards
+  if (!view) {
+    return (
+      <div className="p-4 md:p-8 animate-in fade-in">
+        <div className="mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">Master's Degree Tracking</h1>
+          <p className="text-gray-400">Select a view to get started</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Scholarship Programs Card */}
+          <button
+            onClick={() => setView('SCHOLARSHIPS')}
+            className="group relative bg-gradient-to-br from-purple-500/10 to-blue-500/10 backdrop-blur-sm border-2 border-purple-500/20 hover:border-purple-500/40 rounded-2xl p-8 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-purple-500/20 text-left"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 to-blue-500/0 group-hover:from-purple-500/10 group-hover:to-blue-500/10 rounded-2xl transition-all duration-300" />
+            <div className="relative">
+              <div className="w-16 h-16 bg-purple-500/20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-500/30 transition-colors">
+                <Award className="w-8 h-8 text-purple-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Scholarship Programs</h2>
+              <p className="text-gray-400">
+                Track and manage scholarship programs with linked universities and application statuses
+              </p>
+            </div>
+          </button>
+
+          {/* Countries Card */}
+          <button
+            onClick={() => setView('COUNTRIES')}
+            className="group relative bg-gradient-to-br from-blue-500/10 to-cyan-500/10 backdrop-blur-sm border-2 border-blue-500/20 hover:border-blue-500/40 rounded-2xl p-8 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/20 text-left"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-cyan-500/0 group-hover:from-blue-500/10 group-hover:to-cyan-500/10 rounded-2xl transition-all duration-300" />
+            <div className="relative">
+              <div className="w-16 h-16 bg-blue-500/20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-500/30 transition-colors">
+                <Globe className="w-8 h-8 text-blue-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Countries</h2>
+              <p className="text-gray-400">
+                Explore applications grouped by country and view universities in each region
+              </p>
+            </div>
+          </button>
+
+          {/* Applications Card */}
+          <button
+            onClick={() => setView('APPLICATIONS')}
+            className="group relative bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-sm border-2 border-green-500/20 hover:border-green-500/40 rounded-2xl p-8 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-green-500/20 text-left"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-green-500/0 to-emerald-500/0 group-hover:from-green-500/10 group-hover:to-emerald-500/10 rounded-2xl transition-all duration-300" />
+            <div className="relative">
+              <div className="w-16 h-16 bg-green-500/20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-green-500/30 transition-colors">
+                <GraduationCap className="w-8 h-8 text-green-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Applications</h2>
+              <p className="text-gray-400">
+                Manage your master's degree applications with document tracking and professor contacts
+              </p>
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // View-specific rendering
+  if (view === 'SCHOLARSHIPS') {
+    return (
+      <div className="p-4 md:p-8 animate-in fade-in">
+        <button
+          onClick={() => setView(null)}
+          className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Menu
+        </button>
+        <ScholarshipProgramsView />
+      </div>
+    );
+  }
+
+  if (view === 'COUNTRIES') {
+    return (
+      <div className="p-4 md:p-8 animate-in fade-in">
+        <button
+          onClick={() => setView(null)}
+          className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Menu
+        </button>
+        <CountriesView />
+      </div>
+    );
+  }
+
+  // APPLICATIONS View - Original MasterTracker Implementation
+
   return (
     <div className="p-4 md:p-8 animate-in fade-in">
+      <button
+        onClick={() => setView(null)}
+        className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to Menu
+      </button>
+
       <PageHeader 
         title="Master's Degree Applications" 
         action={
