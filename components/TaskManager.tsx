@@ -12,6 +12,8 @@ const TaskManager = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Partial<Task>>({});
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<'above' | 'below'>('below');
 
   // Subscribe to real-time updates with userId
   useEffect(() => {
@@ -167,29 +169,61 @@ const TaskManager = () => {
 
   const handleDragEnd = (e: React.DragEvent) => {
     setDraggedTaskId(null);
+    setDragOverTaskId(null);
     (e.target as HTMLElement).style.opacity = '1';
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, taskId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    
+    // Calculate if cursor is in top or bottom half
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    const position = e.clientY < midpoint ? 'above' : 'below';
+    
+    setDragOverTaskId(taskId);
+    setDropPosition(position);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverTaskId(null);
   };
 
   const handleDrop = async (e: React.DragEvent, targetTaskId: string) => {
     e.preventDefault();
     
-    if (!draggedTaskId || draggedTaskId === targetTaskId) return;
+    if (!draggedTaskId || draggedTaskId === targetTaskId) {
+      setDragOverTaskId(null);
+      return;
+    }
 
     // Find the dragged and target tasks
     const draggedIndex = filteredTasks.findIndex(t => t.id === draggedTaskId);
     const targetIndex = filteredTasks.findIndex(t => t.id === targetTaskId);
 
-    if (draggedIndex === -1 || targetIndex === -1) return;
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDragOverTaskId(null);
+      return;
+    }
 
     // Reorder the tasks
     const reorderedTasks = [...filteredTasks];
     const [draggedTask] = reorderedTasks.splice(draggedIndex, 1);
-    reorderedTasks.splice(targetIndex, 0, draggedTask);
+    
+    // Insert based on drop position
+    let insertIndex = targetIndex;
+    if (dropPosition === 'below' && draggedIndex < targetIndex) {
+      insertIndex = targetIndex;
+    } else if (dropPosition === 'below' && draggedIndex > targetIndex) {
+      insertIndex = targetIndex + 1;
+    } else if (dropPosition === 'above' && draggedIndex > targetIndex) {
+      insertIndex = targetIndex;
+    } else if (dropPosition === 'above' && draggedIndex < targetIndex) {
+      insertIndex = targetIndex - 1;
+    }
+    
+    reorderedTasks.splice(insertIndex, 0, draggedTask);
 
     // Update order for all affected tasks
     const updates = reorderedTasks.map((task, index) => 
@@ -197,17 +231,42 @@ const TaskManager = () => {
     );
 
     await Promise.all(updates);
+    setDragOverTaskId(null);
   };
 
   // Get today's date for filtering upcoming tasks
   const today = React.useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayDayOfWeek = React.useMemo(() => new Date().getDay(), []);
+  
+  // Helper to check if recurring task should appear today
+  const shouldShowRecurringToday = (task: Task): boolean => {
+    if (!task.isRecurring || task.isCompleted) return false;
+    
+    if (task.recurrenceType === 'daily') return true;
+    
+    if (task.recurrenceType === 'weekly') {
+      if (task.dueDate) {
+        const dueDay = new Date(task.dueDate).getDay();
+        return todayDayOfWeek === dueDay;
+      }
+      return false;
+    }
+    
+    if (task.recurrenceType === 'weekdays' && task.recurrenceDays?.length) {
+      return task.recurrenceDays.includes(todayDayOfWeek);
+    }
+    
+    return false;
+  };
   
   const filteredTasks = tasks.filter(t => {
     if (view === 'ALL') return true;
-    // DAILY: Show tasks due today (regardless of isDaily flag)
-    if (view === 'DAILY') return !t.isCompleted && t.dueDate === today;
-    // BACKLOG: Show tasks without due date or isDaily=false
-    if (view === 'BACKLOG') return !t.isCompleted && (!t.dueDate || !t.isDaily);
+    // DAILY: Show tasks due today + recurring tasks for today
+    if (view === 'DAILY') {
+      return !t.isCompleted && (t.dueDate === today || shouldShowRecurringToday(t));
+    }
+    // BACKLOG: Show tasks without due date or isDaily=false (exclude recurring)
+    if (view === 'BACKLOG') return !t.isCompleted && (!t.dueDate || !t.isDaily) && !t.isRecurring;
     if (view === 'UPCOMING') {
       // Show tasks with due date in the future
       return t.dueDate && t.dueDate > today && !t.isCompleted;
@@ -221,6 +280,14 @@ const TaskManager = () => {
     }
     // Sort completed to bottom (for non-DONE views)
     if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+    
+    // In DAILY view, put recurring tasks at the bottom
+    if (view === 'DAILY') {
+      const aIsRecurring = a.isRecurring && !a.isCompleted;
+      const bIsRecurring = b.isRecurring && !b.isCompleted;
+      if (aIsRecurring !== bIsRecurring) return aIsRecurring ? 1 : -1;
+    }
+    
     // For upcoming view, sort by due date
     if (view === 'UPCOMING' && a.dueDate && b.dueDate) {
       return a.dueDate.localeCompare(b.dueDate);
@@ -292,19 +359,29 @@ const TaskManager = () => {
           <div className="text-center py-10 text-slate-500">No tasks found in this view.</div>
         )}
         {filteredTasks.map(task => (
-          <Card 
-            key={task.id} 
-            className={`
-              transition-all cursor-move hover:border-slate-500 active:scale-[0.99] group
-              ${task.isCompleted ? 'opacity-50' : ''}
-              ${draggedTaskId === task.id ? 'opacity-50 scale-95' : ''}
-            `}
-            draggable={!task.isCompleted && view !== 'DONE'}
-            onDragStart={(e) => handleDragStart(e, task.id)}
-            onDragEnd={handleDragEnd}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, task.id)}
-          >
+          <div key={task.id} className="relative">
+            {/* Drop Indicator - Above */}
+            {dragOverTaskId === task.id && dropPosition === 'above' && draggedTaskId !== task.id && (
+              <div className="absolute -top-1 left-0 right-0 h-0.5 bg-blue-500 rounded-full z-10 shadow-[0_0_10px_rgba(59,130,246,0.5)]">
+                <div className="absolute -left-1 -top-1 w-2 h-2 bg-blue-500 rounded-full" />
+                <div className="absolute -right-1 -top-1 w-2 h-2 bg-blue-500 rounded-full" />
+              </div>
+            )}
+            
+            <Card 
+              className={`
+                transition-all cursor-move hover:border-slate-500 active:scale-[0.99] group relative
+                ${task.isCompleted ? 'opacity-50' : ''}
+                ${draggedTaskId === task.id ? 'opacity-30 scale-95' : ''}
+                ${dragOverTaskId === task.id ? 'border-blue-500/50' : ''}
+              `}
+              draggable={!task.isCompleted && view !== 'DONE'}
+              onDragStart={(e) => handleDragStart(e, task.id)}
+              onDragEnd={handleDragEnd}
+              onDragOver={(e) => handleDragOver(e, task.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, task.id)}
+            >
             <div onClick={() => openEditModal(task)} className="w-full cursor-pointer">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4 flex-1">
@@ -378,6 +455,15 @@ const TaskManager = () => {
               </div>
             </div>
           </Card>
+          
+          {/* Drop Indicator - Below */}
+          {dragOverTaskId === task.id && dropPosition === 'below' && draggedTaskId !== task.id && (
+            <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-blue-500 rounded-full z-10 shadow-[0_0_10px_rgba(59,130,246,0.5)]">
+              <div className="absolute -left-1 -top-1 w-2 h-2 bg-blue-500 rounded-full" />
+              <div className="absolute -right-1 -top-1 w-2 h-2 bg-blue-500 rounded-full" />
+            </div>
+          )}
+        </div>
         ))}
       </div>
 
