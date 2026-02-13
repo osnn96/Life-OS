@@ -104,6 +104,12 @@ const TaskManager = () => {
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
       
+      // First, mark current task as completed with lastCompletedDate
+      await taskService.update(task.id, { 
+        isCompleted: true,
+        lastCompletedDate: todayStr
+      });
+      
       // Calculate next due date based on recurrence type
       let nextDueDate = new Date();
       
@@ -131,20 +137,21 @@ const TaskManager = () => {
         }
       }
       
-      // Create new recurring instance
+      // Then create new recurring instance for next occurrence
       const newTask: Omit<Task, 'id'> = {
         ...task,
         isCompleted: false,
         dueDate: nextDueDate.toISOString().split('T')[0],
-        lastCompletedDate: todayStr,
+        lastCompletedDate: undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       
       await taskService.add(newTask, task.userId);
+    } else {
+      // For non-recurring tasks, just toggle completion
+      await taskService.update(task.id, { isCompleted: !task.isCompleted });
     }
-    
-    await taskService.update(task.id, { isCompleted: !task.isCompleted });
   };
 
   const deleteTask = async (e: React.MouseEvent, id: string) => {
@@ -211,18 +218,14 @@ const TaskManager = () => {
     const reorderedTasks = [...filteredTasks];
     const [draggedTask] = reorderedTasks.splice(draggedIndex, 1);
     
-    // Insert based on drop position
-    let insertIndex = targetIndex;
-    if (dropPosition === 'below' && draggedIndex < targetIndex) {
-      insertIndex = targetIndex;
-    } else if (dropPosition === 'below' && draggedIndex > targetIndex) {
-      insertIndex = targetIndex + 1;
-    } else if (dropPosition === 'above' && draggedIndex > targetIndex) {
-      insertIndex = targetIndex;
-    } else if (dropPosition === 'above' && draggedIndex < targetIndex) {
-      insertIndex = targetIndex - 1;
+    // After removing draggedTask, targetIndex might have shifted
+    let adjustedTargetIndex = targetIndex;
+    if (draggedIndex < targetIndex) {
+      adjustedTargetIndex = targetIndex - 1;
     }
     
+    // Insert based on drop position
+    const insertIndex = dropPosition === 'above' ? adjustedTargetIndex : adjustedTargetIndex + 1;
     reorderedTasks.splice(insertIndex, 0, draggedTask);
 
     // Update order for all affected tasks
@@ -241,6 +244,9 @@ const TaskManager = () => {
   // Helper to check if recurring task should appear today
   const shouldShowRecurringToday = (task: Task): boolean => {
     if (!task.isRecurring || task.isCompleted) return false;
+    
+    // Don't show if already completed today
+    if (task.lastCompletedDate === today) return false;
     
     if (task.recurrenceType === 'daily') return true;
     
@@ -261,9 +267,11 @@ const TaskManager = () => {
   
   const filteredTasks = tasks.filter(t => {
     if (view === 'ALL') return true;
-    // DAILY: Show tasks due today + recurring tasks for today
+    // DAILY: Show tasks due today + recurring tasks for today (not completed today)
     if (view === 'DAILY') {
-      return !t.isCompleted && (t.dueDate === today || shouldShowRecurringToday(t));
+      const isDueToday = t.dueDate === today && !t.isCompleted;
+      const isRecurringToday = shouldShowRecurringToday(t);
+      return isDueToday || isRecurringToday;
     }
     // BACKLOG: Show tasks without due date or isDaily=false (exclude recurring)
     if (view === 'BACKLOG') return !t.isCompleted && (!t.dueDate || !t.isDaily) && !t.isRecurring;
