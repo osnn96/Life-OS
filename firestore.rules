@@ -47,6 +47,13 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && isOwner(resource.data.userId);
     }
     
+    // Notes collection - users can only access their own notes
+    match /notes/{noteId} {
+      allow read: if isSignedIn() && isOwner(resource.data.userId);
+      allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.userId);
+    }
+    
     // Deny all other access
     match /{document=**} {
       allow read, write: if false;

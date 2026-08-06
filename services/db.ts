@@ -20,6 +20,7 @@ import {
   ErasmusInternship,
   UsefulLink, 
   ScholarshipProgram,
+  Note,
   Priority, 
   JobStatus, 
   MasterAppType, 
@@ -35,6 +36,7 @@ const COLLECTIONS = {
   ERASMUS: 'erasmus',
   LINKS: 'links',
   SCHOLARSHIP_PROGRAMS: 'scholarship_programs',
+  NOTES: 'notes',
 };
 
 // Generic Firestore Service with Real-time Updates and User Isolation
@@ -123,6 +125,7 @@ export const masterService = new FirestoreService<MasterApplication>(COLLECTIONS
 export const erasmusService = new FirestoreService<ErasmusInternship>(COLLECTIONS.ERASMUS);
 export const linkService = new FirestoreService<UsefulLink>(COLLECTIONS.LINKS);
 export const scholarshipService = new FirestoreService<ScholarshipProgram>(COLLECTIONS.SCHOLARSHIP_PROGRAMS);
+export const noteService = new FirestoreService<Note>(COLLECTIONS.NOTES);
 
 // Optional: Seed data for testing (run manually in console if needed)
 export const seedData = async () => {

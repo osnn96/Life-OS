@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { taskService, masterService } from '../services/db';
+import { taskService, masterService, noteService } from '../services/db';
 import { useAuth } from '../context/AuthContext';
-import { Task, MasterApplication, Priority } from '../types';
-import { Clock, AlertCircle } from 'lucide-react';
+import { Task, MasterApplication, Note, Priority } from '../types';
+import { Clock, AlertCircle, StickyNote } from 'lucide-react';
 
 const CalendarWidget = () => {
   const { currentUser } = useAuth();
   const [weekDays, setWeekDays] = useState<Date[]>([]);
-  const [events, setEvents] = useState<{ tasks: Task[], masters: MasterApplication[] }>({ tasks: [], masters: [] });
+  const [events, setEvents] = useState<{ tasks: Task[], masters: MasterApplication[], notes: Note[] }>({ tasks: [], masters: [], notes: [] });
 
   useEffect(() => {
     if (!currentUser) return;
@@ -28,10 +28,14 @@ const CalendarWidget = () => {
     const unsubscribeMasters = masterService.subscribe(currentUser.uid, (masters) => {
       setEvents(prev => ({ ...prev, masters }));
     });
+    const unsubscribeNotes = noteService.subscribe(currentUser.uid, (notes) => {
+      setEvents(prev => ({ ...prev, notes }));
+    });
 
     return () => {
       unsubscribeTasks();
       unsubscribeMasters();
+      unsubscribeNotes();
     };
   }, [currentUser]);
 
@@ -46,8 +50,10 @@ const CalendarWidget = () => {
     const dayTasks = events.tasks.filter(t => t.dueDate === dateStr && !t.isCompleted);
     // Filter master's deadlines on this date
     const dayMasters = events.masters.filter(m => m.deadline === dateStr);
+    // Filter notes dated on this date
+    const dayNotes = events.notes.filter(n => n.date === dateStr);
     
-    return { dayTasks, dayMasters };
+    return { dayTasks, dayMasters, dayNotes };
   };
 
   return (
@@ -62,7 +68,7 @@ const CalendarWidget = () => {
       <div className="overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0">
         <div className="flex md:grid md:grid-cols-7 gap-3 min-w-[800px] md:min-w-0">
           {weekDays.map((date, idx) => {
-            const { dayTasks, dayMasters } = getDayEvents(date);
+            const { dayTasks, dayMasters, dayNotes } = getDayEvents(date);
             const isToday = idx === 0; // First item is always today
 
             return (
@@ -112,8 +118,20 @@ const CalendarWidget = () => {
                     </div>
                   ))}
 
+                  {/* Notes */}
+                  {dayNotes.map(n => (
+                    <div key={n.id} className="bg-indigo-900/20 border border-indigo-500/30 rounded p-1.5 hover:bg-indigo-900/30 transition-colors">
+                      <div className="text-[10px] font-bold text-indigo-400 uppercase leading-none mb-1 flex items-center gap-1">
+                        <StickyNote size={8} /> Note
+                      </div>
+                      <div className="text-xs text-indigo-100 font-medium leading-tight line-clamp-2 truncate" title={n.title}>
+                        {n.title}
+                      </div>
+                    </div>
+                  ))}
+
                   {/* Empty State */}
-                  {dayMasters.length === 0 && dayTasks.length === 0 && (
+                  {dayMasters.length === 0 && dayTasks.length === 0 && dayNotes.length === 0 && (
                     <div className="flex-1 flex items-center justify-center opacity-20">
                       <div className="w-1 h-8 bg-slate-500 rounded-full"></div>
                     </div>

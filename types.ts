@@ -53,6 +53,12 @@ export enum LinkCategory {
   OTHER = 'Other',
 }
 
+export enum NotePriority {
+  IMPORTANT = 'important',
+  MID = 'mid',
+  LOW = 'low',
+}
+
 // Interfaces
 
 export interface BaseItem {
@@ -152,5 +158,16 @@ export interface UsefulLink {
   updatedAt: string;
 }
 
+export interface Note {
+  id: string;
+  userId: string;
+  title: string;
+  content?: string;
+  priority: NotePriority;
+  date?: string; // Optional date in YYYY-MM-DD format
+  createdAt: string;
+  updatedAt: string;
+}
+
 // App View Type
-export type AppView = 'DASHBOARD' | 'TASKS' | 'JOBS' | 'MASTERS' | 'ERASMUS' | 'LINKS';
+export type AppView = 'DASHBOARD' | 'TASKS' | 'JOBS' | 'MASTERS' | 'ERASMUS' | 'LINKS' | 'NOTES';
