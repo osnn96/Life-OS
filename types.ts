@@ -169,5 +169,31 @@ export interface Note {
   updatedAt: string;
 }
 
+// Full-Task (Notion-like master task board)
+export interface FullTaskItem {
+  id: string;
+  text: string;
+  isCompleted: boolean;
+  notes?: string;
+  dueDate?: string;
+}
+
+export interface FullTaskSection {
+  id: string;
+  title: string;
+  color?: 'blue' | 'purple' | 'amber' | 'emerald' | 'rose' | 'cyan' | 'slate';
+  isCollapsed?: boolean;
+  items: FullTaskItem[];
+}
+
+export interface FullTaskPage {
+  id: string;
+  userId: string;
+  title?: string;
+  sections: FullTaskSection[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 // App View Type
-export type AppView = 'DASHBOARD' | 'TASKS' | 'JOBS' | 'MASTERS' | 'ERASMUS' | 'LINKS' | 'NOTES';
+export type AppView = 'DASHBOARD' | 'TASKS' | 'FULL_TASKS' | 'JOBS' | 'MASTERS' | 'ERASMUS' | 'LINKS' | 'NOTES';

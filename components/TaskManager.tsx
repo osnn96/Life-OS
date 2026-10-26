@@ -29,11 +29,11 @@ const TaskManager = () => {
     const today = new Date().toISOString().split('T')[0];
     
     tasks.forEach(async (task) => {
-      // If task is daily, not completed, and due date is in the past
-      if (task.isDaily && !task.isCompleted && task.dueDate && task.dueDate < today) {
+      // If task is daily, not completed, non-recurring, and due date is in the past
+      if (task.isDaily && !task.isCompleted && !task.isRecurring && task.dueDate && task.dueDate < today) {
         await taskService.update(task.id, {
           isDaily: false,
-          overdueFromDaily: true
+          overdueFromDaily: true,
         });
       }
     });
@@ -138,11 +138,16 @@ const TaskManager = () => {
       }
       
       // Then create new recurring instance for next occurrence
+      // Destructure to remove 'id' so Firestore generates a fresh document ID
+      const { id: _removedId, ...taskWithoutId } = task;
       const newTask: Omit<Task, 'id'> = {
-        ...task,
+        ...taskWithoutId,
         isCompleted: false,
+        isDaily: true,
         dueDate: nextDueDate.toISOString().split('T')[0],
         lastCompletedDate: undefined,
+        overdueFromDaily: undefined,
+        order: undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -243,10 +248,15 @@ const TaskManager = () => {
   
   // Helper to check if recurring task should appear today
   const shouldShowRecurringToday = (task: Task): boolean => {
-    if (!task.isRecurring || task.isCompleted) return false;
+    // Only show active, non-completed tasks that belong in the Daily list
+    if (!task.isRecurring || task.isCompleted || !task.isDaily) return false;
     
     // Don't show if already completed today
     if (task.lastCompletedDate === today) return false;
+
+    // Only show if the task's due date is today or in the past (i.e. it's actually due).
+    // This prevents future recurring instances from appearing prematurely.
+    if (task.dueDate && task.dueDate > today) return false;
     
     if (task.recurrenceType === 'daily') return true;
     

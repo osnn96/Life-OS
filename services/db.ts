@@ -21,6 +21,7 @@ import {
   UsefulLink, 
   ScholarshipProgram,
   Note,
+  FullTaskPage,
   Priority, 
   JobStatus, 
   MasterAppType, 
@@ -31,6 +32,7 @@ import {
 // Collection names
 const COLLECTIONS = {
   TASKS: 'tasks',
+  FULL_TASKS: 'full_tasks',
   JOBS: 'jobs',
   MASTERS: 'masters',
   ERASMUS: 'erasmus',
@@ -56,8 +58,8 @@ class FirestoreService<T extends { id: string; userId: string }> {
     
     const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
       const items: T[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        id: doc.id
       } as T));
       callback(items);
     }, (error) => {
@@ -70,8 +72,9 @@ class FirestoreService<T extends { id: string; userId: string }> {
   // Add new item with userId
   async add(item: Omit<T, 'id'>, userId: string): Promise<void> {
     try {
+      const { id: _ignoreId, ...cleanItem } = item as any;
       await addDoc(collection(db, this.collectionName), {
-        ...item,
+        ...cleanItem,
         userId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -120,6 +123,7 @@ class FirestoreService<T extends { id: string; userId: string }> {
 
 // Instantiate services
 export const taskService = new FirestoreService<Task>(COLLECTIONS.TASKS);
+export const fullTaskService = new FirestoreService<FullTaskPage>(COLLECTIONS.FULL_TASKS);
 export const jobService = new FirestoreService<JobApplication>(COLLECTIONS.JOBS);
 export const masterService = new FirestoreService<MasterApplication>(COLLECTIONS.MASTERS);
 export const erasmusService = new FirestoreService<ErasmusInternship>(COLLECTIONS.ERASMUS);

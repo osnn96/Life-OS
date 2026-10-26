@@ -9,7 +9,8 @@ import {
   X,
   LogOut,
   Link as LinkIcon,
-  StickyNote
+  StickyNote,
+  ListTodo
 } from 'lucide-react';
 import { AppView, Priority, Task, JobApplication, MasterApplication } from './types';
 import { taskService, jobService, masterService } from './services/db';
@@ -17,6 +18,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Module Imports
 import TaskManager from './components/TaskManager';
+import FullTaskManager from './components/FullTaskManager';
 import JobTracker from './components/JobTracker';
 import MasterTracker from './components/MasterTracker';
 import ErasmusTracker from './components/ErasmusTracker';
@@ -104,10 +106,14 @@ const DashboardHome = ({ setView }: { setView: (v: AppView) => void }) => {
       </div>
 
       <h2 className="text-xl font-bold text-white mb-4">Quick Actions</h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <button onClick={() => setView('TASKS')} className="p-4 bg-slate-800 border border-slate-700 rounded-xl text-left hover:border-primary transition-colors group">
           <CheckSquare className="text-blue-500 mb-2 group-hover:scale-110 transition-transform" />
-          <span className="font-semibold text-slate-200">Manage Tasks</span>
+          <span className="font-semibold text-slate-200">Daily Tasks</span>
+        </button>
+        <button onClick={() => setView('FULL_TASKS')} className="p-4 bg-slate-800 border border-slate-700 rounded-xl text-left hover:border-cyan-500 transition-colors group">
+          <ListTodo className="text-cyan-400 mb-2 group-hover:scale-110 transition-transform" />
+          <span className="font-semibold text-slate-200">Full-Task</span>
         </button>
         <button onClick={() => setView('JOBS')} className="p-4 bg-slate-800 border border-slate-700 rounded-xl text-left hover:border-purple-500 transition-colors group">
           <Briefcase className="text-purple-500 mb-2 group-hover:scale-110 transition-transform" />
@@ -165,6 +171,7 @@ const App = () => {
         <nav className="space-y-2 flex-1">
           <NavItem view="DASHBOARD" label="Dashboard" icon={LayoutDashboard} />
           <NavItem view="TASKS" label="Tasks" icon={CheckSquare} />
+          <NavItem view="FULL_TASKS" label="Full-Task" icon={ListTodo} />
           <NavItem view="JOBS" label="Job Applications" icon={Briefcase} />
           <NavItem view="MASTERS" label="Master's Apps" icon={GraduationCap} />
           <NavItem view="ERASMUS" label="Erasmus" icon={Plane} />
@@ -211,6 +218,7 @@ const App = () => {
         <div className="md:hidden fixed inset-0 bg-slate-900 z-10 pt-20 px-4 space-y-2 animate-in slide-in-from-top-10">
           <NavItem view="DASHBOARD" label="Dashboard" icon={LayoutDashboard} />
           <NavItem view="TASKS" label="Tasks" icon={CheckSquare} />
+          <NavItem view="FULL_TASKS" label="Full-Task" icon={ListTodo} />
           <NavItem view="JOBS" label="Job Applications" icon={Briefcase} />
           <NavItem view="MASTERS" label="Master's Apps" icon={GraduationCap} />
           <NavItem view="ERASMUS" label="Erasmus" icon={Plane} />
@@ -223,6 +231,7 @@ const App = () => {
       <main className="flex-1 md:ml-64 mt-16 md:mt-0 min-h-screen bg-background">
         {currentView === 'DASHBOARD' && <DashboardHome setView={setCurrentView} />}
         {currentView === 'TASKS' && <TaskManager />}
+        {currentView === 'FULL_TASKS' && <FullTaskManager />}
         {currentView === 'JOBS' && <JobTracker />}
         {currentView === 'MASTERS' && <MasterTracker />}
         {currentView === 'ERASMUS' && <ErasmusTracker />}
