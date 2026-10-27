@@ -45,9 +45,37 @@ const CalendarWidget = () => {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const dateStr = `${year}-${month}-${day}`;
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const dayOfWeek = date.getDay();
     
     // Filter tasks due on this date (and not completed)
-    const dayTasks = events.tasks.filter(t => t.dueDate === dateStr && !t.isCompleted);
+    const dayTasks = events.tasks.filter(t => {
+      if (t.isCompleted) return false;
+      if (t.isRecurring) {
+        if (t.lastCompletedDate === dateStr) return false;
+        if (t.dueDate && t.dueDate > dateStr) return false;
+        if (t.recurrenceType === 'daily') {
+          // Show daily recurring tasks on today and forward if not completed today? 
+          // Show if due date is today or in past? Or just daily recurring
+          if (t.dueDate && t.dueDate <= dateStr) return true;
+          if (!t.dueDate && dateStr >= todayStr) return true;
+          return dateStr === todayStr;
+        }
+        if (t.recurrenceType === 'weekly') {
+          if (t.dueDate) {
+            const dueDateObj = new Date(t.dueDate);
+            return dueDateObj.getDay() === dayOfWeek && dateStr >= todayStr;
+          }
+          return false;
+        }
+        if (t.recurrenceType === 'weekdays' && t.recurrenceDays?.length) {
+          return t.recurrenceDays.includes(dayOfWeek) && dateStr >= todayStr;
+        }
+        return false;
+      }
+      return t.dueDate === dateStr;
+    });
     // Filter master's deadlines on this date
     const dayMasters = events.masters.filter(m => m.deadline === dateStr);
     // Filter notes dated on this date
@@ -114,6 +142,7 @@ const CalendarWidget = () => {
                           t.priority === Priority.MEDIUM ? 'bg-orange-400' : 'bg-green-400'
                         }`}></span>
                         {t.title}
+                        {t.isRecurring && <span className="ml-1 text-[9px] text-blue-400">↻</span>}
                       </div>
                     </div>
                   ))}

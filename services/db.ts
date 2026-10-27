@@ -69,16 +69,80 @@ class FirestoreService<T extends { id: string; userId: string }> {
     return unsubscribe;
   }
 
+  private deepCleanForAdd(obj: any): any {
+    if (obj === null || obj === undefined) {
+      return undefined;
+    }
+    if (Array.isArray(obj)) {
+      return obj
+        .map(item => this.deepCleanForAdd(item))
+        .filter(item => item !== undefined);
+    }
+    if (typeof obj === 'object') {
+      const cleaned: any = {};
+      Object.entries(obj).forEach(([key, value]) => {
+        const cleanedValue = this.deepCleanForAdd(value);
+        if (cleanedValue !== undefined && cleanedValue !== null && cleanedValue !== '') {
+          cleaned[key] = cleanedValue;
+        }
+      });
+      return cleaned;
+    }
+    if (obj === '') {
+      return undefined;
+    }
+    return obj;
+  }
+
+  private deepCleanForUpdate(obj: any): any {
+    if (obj === null || obj === undefined) {
+      return deleteField();
+    }
+    if (Array.isArray(obj)) {
+      const cleanedArray = obj
+        .map(item => {
+          if (item === null || item === undefined || item === '') {
+            return undefined;
+          }
+          if (typeof item === 'object') {
+            return this.deepCleanForUpdate(item);
+          }
+          return item;
+        })
+        .filter(item => item !== undefined);
+      return cleanedArray;
+    }
+    if (typeof obj === 'object') {
+      const cleaned: any = {};
+      Object.entries(obj).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') {
+          cleaned[key] = deleteField();
+        } else if (typeof value === 'object') {
+          cleaned[key] = this.deepCleanForUpdate(value);
+        } else {
+          cleaned[key] = value;
+        }
+      });
+      return cleaned;
+    }
+    if (obj === '') {
+      return deleteField();
+    }
+    return obj;
+  }
+
   // Add new item with userId
-  async add(item: Omit<T, 'id'>, userId: string): Promise<void> {
+  async add(item: Omit<T, 'id'>, userId: string): Promise<any> {
     try {
       const { id: _ignoreId, ...cleanItem } = item as any;
-      await addDoc(collection(db, this.collectionName), {
-        ...cleanItem,
+      const cleaned = this.deepCleanForAdd(cleanItem);
+      const docRef = await addDoc(collection(db, this.collectionName), {
+        ...cleaned,
         userId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      return { id: docRef.id };
     } catch (error) {
       console.error(`Error adding to ${this.collectionName}:`, error);
       throw error;
@@ -94,9 +158,13 @@ class FirestoreService<T extends { id: string; userId: string }> {
       const processedUpdates: any = { updatedAt: new Date().toISOString() };
       
       Object.entries(updates).forEach(([key, value]) => {
+        if (key === 'updatedAt') {
+          return;
+        }
         if (value === undefined || value === null || value === '') {
-          // Delete the field from Firestore if value is empty
           processedUpdates[key] = deleteField();
+        } else if (typeof value === 'object') {
+          processedUpdates[key] = this.deepCleanForUpdate(value);
         } else {
           processedUpdates[key] = value;
         }

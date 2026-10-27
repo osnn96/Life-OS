@@ -176,6 +176,11 @@ export interface FullTaskItem {
   isCompleted: boolean;
   notes?: string;
   dueDate?: string;
+  priority?: Priority;
+  isRecurring?: boolean;
+  recurrenceType?: 'daily' | 'weekly' | 'monthly' | 'weekdays';
+  recurrenceDays?: number[];
+  scheduledTaskId?: string;
 }
 
 export interface FullTaskSection {

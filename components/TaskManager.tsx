@@ -286,8 +286,10 @@ const TaskManager = () => {
     // BACKLOG: Show tasks without due date or isDaily=false (exclude recurring)
     if (view === 'BACKLOG') return !t.isCompleted && (!t.dueDate || !t.isDaily) && !t.isRecurring;
     if (view === 'UPCOMING') {
-      // Show tasks with due date in the future
-      return t.dueDate && t.dueDate > today && !t.isCompleted;
+      // Show tasks with due date in the future or recurring tasks
+      if (t.isCompleted) return false;
+      if (t.isRecurring) return true;
+      return t.dueDate && t.dueDate >= today;
     }
     if (view === 'DONE') return t.isCompleted;
     return true;
@@ -307,8 +309,12 @@ const TaskManager = () => {
     }
     
     // For upcoming view, sort by due date
-    if (view === 'UPCOMING' && a.dueDate && b.dueDate) {
-      return a.dueDate.localeCompare(b.dueDate);
+    if (view === 'UPCOMING') {
+      const aDate = a.dueDate || '';
+      const bDate = b.dueDate || '';
+      if (aDate && bDate && aDate !== bDate) return aDate.localeCompare(bDate);
+      if (aDate && !bDate) return -1;
+      if (!aDate && bDate) return 1;
     }
     // Sort by custom order if set (for drag & drop)
     if (a.order !== undefined && b.order !== undefined) {

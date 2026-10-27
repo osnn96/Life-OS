@@ -60,6 +60,7 @@ const DashboardHome = ({ setView }: { setView: (v: AppView) => void }) => {
   // Update stats whenever data changes
   useEffect(() => {
     const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
     const nextWeek = new Date();
     nextWeek.setDate(now.getDate() + 7);
 
@@ -69,12 +70,31 @@ const DashboardHome = ({ setView }: { setView: (v: AppView) => void }) => {
       return d >= now && d <= nextWeek;
     };
 
+    const dailyTasksCount = tasks.filter(t => {
+      if (t.isCompleted) return false;
+      if (t.isRecurring && t.isDaily) {
+        // Check if should show today
+        if (t.lastCompletedDate === todayStr) return false;
+        if (t.dueDate && t.dueDate > todayStr) return false;
+        if (t.recurrenceType === 'daily') return true;
+        const dayOfWeek = now.getDay();
+        if (t.recurrenceType === 'weekly' && t.dueDate) {
+          return new Date(t.dueDate).getDay() === dayOfWeek;
+        }
+        if (t.recurrenceType === 'weekdays' && t.recurrenceDays?.length) {
+          return t.recurrenceDays.includes(dayOfWeek);
+        }
+        return false;
+      }
+      return t.isDaily && !t.isCompleted;
+    }).length;
+
     setStats({
       urgentTasks: tasks.filter(t => t.priority === Priority.HIGH && !t.isCompleted).length,
-      dailyTasks: tasks.filter(t => t.isDaily && !t.isCompleted).length,
+      dailyTasks: dailyTasksCount,
       jobApps: jobs.length,
       masterApps: masters.length,
-      upcomingDeadlines: masters.filter(m => isUrgent(m.deadline)).length + tasks.filter(t => isUrgent(t.dueDate)).length
+      upcomingDeadlines: masters.filter(m => isUrgent(m.deadline)).length + tasks.filter(t => !t.isCompleted && ((t.dueDate && isUrgent(t.dueDate)) || (t.isRecurring))).length
     });
   }, [tasks, jobs, masters]);
 

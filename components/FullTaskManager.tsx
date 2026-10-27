@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { FullTaskPage, FullTaskSection, FullTaskItem, Priority } from '../types';
 import { fullTaskService, taskService } from '../services/db';
+import { db } from '../services/firebase';
+import { doc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { 
   Plus, 
   Trash2, 
@@ -84,6 +86,19 @@ const DEFAULT_SECTIONS: FullTaskSection[] = [
   }
 ];
 
+interface ModalTaskState {
+  sectionId: string;
+  itemId: string;
+  sectionTitle: string;
+  title: string;
+  dueDate: string;
+  priority: Priority;
+  isRecurring: boolean;
+  recurrenceType: 'daily' | 'weekly' | 'monthly' | 'weekdays';
+  recurrenceDays: number[];
+  notes?: string;
+}
+
 export default function FullTaskManager() {
   const { currentUser } = useAuth();
   const [page, setPage] = useState<FullTaskPage | null>(null);
@@ -93,9 +108,7 @@ export default function FullTaskManager() {
   const [filterMode, setFilterMode] = useState<'all' | 'active' | 'completed'>('all');
   const [markdownMode, setMarkdownMode] = useState(false);
   const [markdownText, setMarkdownText] = useState('');
-  const [scheduleModalItem, setScheduleModalItem] = useState<{ text: string; sectionTitle: string } | null>(null);
-  const [scheduleDate, setScheduleDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [schedulePriority, setSchedulePriority] = useState<Priority>(Priority.MEDIUM);
+  const [modalTask, setModalTask] = useState<ModalTaskState | null>(null);
   const [copiedMarkdown, setCopiedMarkdown] = useState(false);
 
   const itemInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -128,8 +141,35 @@ export default function FullTaskManager() {
     if (!page || !currentUser) return;
     setSaving(true);
     try {
+      const cleanedSections = updatedSections.map((section: any) => {
+        const cleanedSection: any = {
+          id: section.id,
+          title: section.title,
+          isCollapsed: section.isCollapsed || false,
+          items: (section.items || []).map((item: any) => {
+            const cleanedItem: any = {
+              id: item.id,
+              text: item.text,
+              isCompleted: item.isCompleted || false
+            };
+            if (item.notes) cleanedItem.notes = item.notes;
+            if (item.dueDate) cleanedItem.dueDate = item.dueDate;
+            if (item.priority) cleanedItem.priority = item.priority;
+            if (item.isRecurring) {
+              cleanedItem.isRecurring = true;
+              if (item.recurrenceType) cleanedItem.recurrenceType = item.recurrenceType;
+              if (item.recurrenceType === 'weekdays' && item.recurrenceDays && item.recurrenceDays.length > 0) {
+                cleanedItem.recurrenceDays = item.recurrenceDays;
+              }
+            }
+            return cleanedItem;
+          })
+        };
+        if (section.color) cleanedSection.color = section.color;
+        return cleanedSection;
+      });
       await fullTaskService.update(page.id, {
-        sections: updatedSections,
+        sections: cleanedSections,
         title: title !== undefined ? title : page.title,
         updatedAt: new Date().toISOString()
       });
@@ -244,26 +284,120 @@ export default function FullTaskManager() {
     savePage(updated);
   };
 
-  const toggleItemComplete = (sectionId: string, itemId: string) => {
-    if (!page) return;
+  const toggleItemComplete = async (sectionId: string, itemId: string) => {
+    if (!page || !currentUser) return;
+    const sec = page.sections.find(s => s.id === sectionId);
+    const item = sec?.items.find(i => i.id === itemId);
+    const newCompleted = !(item?.isCompleted);
+    
     const updated = page.sections.map(s => {
       if (s.id !== sectionId) return s;
       return {
         ...s,
-        items: s.items.map(i => i.id === itemId ? { ...i, isCompleted: !i.isCompleted } : i)
+        items: s.items.map(i => i.id === itemId ? { ...i, isCompleted: newCompleted } : i)
       };
     });
     setPage({ ...page, sections: updated });
     savePage(updated);
+    
+    // Sync to scheduled task in Tasks section
+    if (item?.scheduledTaskId) {
+      try {
+        if (newCompleted && item.isRecurring) {
+          // For recurring tasks, replicate TaskManager behavior
+          const today = new Date();
+          const todayStr = today.toISOString().split('T')[0];
+          await taskService.update(item.scheduledTaskId, { 
+            isCompleted: true,
+            lastCompletedDate: todayStr
+          });
+          // Create next occurrence
+          let nextDueDate = new Date();
+          if (item.recurrenceType === 'daily') {
+            nextDueDate.setDate(nextDueDate.getDate() + 1);
+          } else if (item.recurrenceType === 'weekly') {
+            nextDueDate.setDate(nextDueDate.getDate() + 7);
+          } else if (item.recurrenceType === 'monthly') {
+            nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+          } else if (item.recurrenceType === 'weekdays' && item.recurrenceDays?.length) {
+            const currentDay = today.getDay();
+            const sortedDays = [...item.recurrenceDays].sort((a: number, b: number) => a - b);
+            let nextDay = sortedDays.find((day: number) => day > currentDay);
+            if (nextDay === undefined) {
+              nextDay = sortedDays[0];
+              const daysToAdd = (7 - currentDay) + nextDay;
+              nextDueDate.setDate(nextDueDate.getDate() + daysToAdd);
+            } else {
+              nextDueDate.setDate(nextDueDate.getDate() + (nextDay - currentDay));
+            }
+          }
+          const baseTask: any = {
+            title: item.text,
+            priority: item.priority || Priority.MEDIUM,
+            dueDate: nextDueDate.toISOString().split('T')[0],
+            isDaily: true,
+            isCompleted: false,
+            description: item.notes || `Scheduled from Full-Task`,
+            fullTaskSourceId: item.id,
+            isRecurring: true,
+            userId: currentUser.uid,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          if (item.recurrenceType) baseTask.recurrenceType = item.recurrenceType;
+          if (item.recurrenceType === 'weekdays' && item.recurrenceDays?.length) baseTask.recurrenceDays = item.recurrenceDays;
+          const newTaskRef = await taskService.add(baseTask, currentUser.uid);
+          if ((newTaskRef as any)?.id) {
+            const updated = page.sections.map(s => {
+              if (s.id !== sectionId) return s;
+              return {
+                ...s,
+                items: s.items.map(i => i.id === itemId ? { ...i, scheduledTaskId: (newTaskRef as any).id } : i)
+              };
+            });
+            setPage({ ...page, sections: updated });
+            savePage(updated);
+          }
+        } else {
+          await taskService.update(item.scheduledTaskId, { isCompleted: newCompleted });
+        }
+      } catch (e) {
+        console.error('Error syncing completion to task:', e);
+      }
+    }
   };
 
-  const deleteItem = (sectionId: string, itemId: string, focusPrevious = false) => {
-    if (!page) return;
+  const deleteItem = async (sectionId: string, itemId: string, focusPrevious = false) => {
+    if (!page || !currentUser) return;
     let prevItemId: string | null = null;
     const sec = page.sections.find(s => s.id === sectionId);
     if (sec) {
       const idx = sec.items.findIndex(i => i.id === itemId);
       if (idx > 0) prevItemId = sec.items[idx - 1].id;
+      const itemToDelete = sec.items[idx];
+      if (itemToDelete?.scheduledTaskId) {
+        try {
+          await taskService.delete(itemToDelete.scheduledTaskId);
+        } catch (e) {
+          try {
+            await deleteDoc(doc(db, 'tasks', itemToDelete.scheduledTaskId));
+          } catch (e2) {
+            console.error('Error deleting synced task:', e2);
+          }
+        }
+      } else {
+        try {
+          const q = query(
+            collection(db, 'tasks'),
+            where('userId', '==', currentUser.uid),
+            where('fullTaskSourceId', '==', itemId)
+          );
+          const snapshot = await getDocs(q);
+          for (const d of snapshot.docs) {
+            try { await deleteDoc(d.ref); } catch (e) {}
+          }
+        } catch (e) {}
+      }
     }
 
     const updated = page.sections.map(s => {
@@ -361,23 +495,120 @@ export default function FullTaskManager() {
     setMarkdownMode(false);
   };
 
-  // Schedule task to formal Tasks manager
-  const handleScheduleConfirm = async () => {
-    if (!scheduleModalItem || !currentUser) return;
-    try {
-      await taskService.add({
-        title: scheduleModalItem.text,
-        priority: schedulePriority,
-        dueDate: scheduleDate,
-        isDaily: scheduleDate === new Date().toISOString().split('T')[0],
-        isCompleted: false,
-        description: `Scheduled from Full-Task [${scheduleModalItem.sectionTitle}]`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      } as any, currentUser.uid);
+  // Open Edit / Recurrence Modal
+  const openEditModal = (sectionId: string, sectionTitle: string, item: FullTaskItem) => {
+    setModalTask({
+      sectionId,
+      itemId: item.id,
+      sectionTitle,
+      title: item.text,
+      dueDate: item.dueDate || new Date().toISOString().split('T')[0],
+      priority: item.priority || Priority.MEDIUM,
+      isRecurring: item.isRecurring || false,
+      recurrenceType: item.recurrenceType || 'daily',
+      recurrenceDays: item.recurrenceDays || [1, 2, 3, 4, 5],
+      notes: item.notes || ''
+    });
+  };
 
-      alert(`Task "${scheduleModalItem.text}" scheduled for ${scheduleDate}!`);
-      setScheduleModalItem(null);
+  // Save Item Details to Full-Task
+  const handleSaveItemDetails = () => {
+    if (!modalTask || !page) return;
+    const updated = page.sections.map(s => {
+      if (s.id !== modalTask.sectionId) return s;
+      return {
+        ...s,
+        items: s.items.map(i => {
+          if (i.id !== modalTask.itemId) return i;
+          return {
+            ...i,
+            text: modalTask.title,
+            dueDate: modalTask.dueDate || undefined,
+            priority: modalTask.priority,
+            isRecurring: modalTask.isRecurring,
+            ...(modalTask.isRecurring ? { recurrenceType: modalTask.recurrenceType } : {}),
+            ...(modalTask.isRecurring && modalTask.recurrenceType === 'weekdays' && modalTask.recurrenceDays?.length ? { recurrenceDays: modalTask.recurrenceDays } : {}),
+            ...(modalTask.notes ? { notes: modalTask.notes } : {})
+          };
+        })
+      };
+    });
+    setPage({ ...page, sections: updated });
+    savePage(updated);
+    setModalTask(null);
+  };
+
+  // Schedule task to formal Tasks manager with full recurrence support
+  const handleScheduleToMainTasks = async () => {
+    if (!modalTask || !currentUser || !page) return;
+    try {
+      // 1. Also update the item in Full-Task so the board shows the updated title and badges
+      const updated = page.sections.map(s => {
+        if (s.id !== modalTask.sectionId) return s;
+        return {
+          ...s,
+          items: s.items.map(i => {
+            if (i.id !== modalTask.itemId) return i;
+            return {
+              ...i,
+              text: modalTask.title,
+              dueDate: modalTask.dueDate || undefined,
+              priority: modalTask.priority,
+              isRecurring: modalTask.isRecurring,
+              ...(modalTask.isRecurring ? { recurrenceType: modalTask.recurrenceType } : {}),
+              ...(modalTask.isRecurring && modalTask.recurrenceType === 'weekdays' && modalTask.recurrenceDays?.length ? { recurrenceDays: modalTask.recurrenceDays } : {}),
+              ...(modalTask.notes ? { notes: modalTask.notes } : {})
+            };
+          })
+        };
+      });
+      setPage({ ...page, sections: updated });
+      savePage(updated);
+
+      // 2. Add to Main Tasks manager with full recurring configuration
+      const today = new Date().toISOString().split('T')[0];
+      const baseTask: any = {
+        title: modalTask.title || 'New Task',
+        priority: modalTask.priority || Priority.MEDIUM,
+        dueDate: modalTask.dueDate || today,
+        isDaily: modalTask.isRecurring || (modalTask.dueDate === today),
+        isCompleted: false,
+        description: modalTask.notes || `Scheduled from Full-Task [${modalTask.sectionTitle}]`,
+        fullTaskSourceId: modalTask.itemId,
+        isRecurring: modalTask.isRecurring || false,
+        userId: currentUser.uid,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (modalTask.isRecurring && modalTask.recurrenceType) {
+        baseTask.recurrenceType = modalTask.recurrenceType;
+        if (modalTask.recurrenceType === 'weekdays' && modalTask.recurrenceDays && modalTask.recurrenceDays.length > 0) {
+          baseTask.recurrenceDays = modalTask.recurrenceDays;
+        }
+      }
+      baseTask.fullTaskSourceId = modalTask.itemId;
+
+      const newTaskRef = await taskService.add(baseTask as any, currentUser.uid);
+      try {
+        if ((newTaskRef as any)?.id && page && modalTask) {
+          const updatedWithRef = page.sections.map(s => {
+            if (s.id !== modalTask.sectionId) return s;
+            return {
+              ...s,
+            items: s.items.map(i => {
+              if (i.id !== modalTask.itemId) return i;
+              return { ...i, scheduledTaskId: (newTaskRef as any).id };
+            })
+            };
+          });
+          setPage({ ...page, sections: updatedWithRef });
+          savePage(updatedWithRef);
+        }
+      } catch (e) {
+        // ignore
+      }
+      alert(`Task "${modalTask.title}" successfully scheduled to Tasks manager!`);
+      setModalTask(null);
     } catch (err) {
       console.error('Error scheduling task:', err);
       alert('Failed to schedule task.');
@@ -672,34 +903,64 @@ export default function FullTaskManager() {
                               )}
                             </button>
 
-                            {/* Task Inline Input */}
-                            <input
-                              ref={(el) => (itemInputRefs.current[item.id] = el)}
-                              type="text"
-                              value={item.text}
-                              onChange={(e) => updateItemText(section.id, item.id, e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  addItem(section.id, item.id);
-                                } else if (e.key === 'Backspace' && item.text === '') {
-                                  e.preventDefault();
-                                  deleteItem(section.id, item.id, true);
-                                }
-                              }}
-                              placeholder="To-do item... (press Enter for next)"
-                              className={`flex-1 bg-transparent border-none outline-none text-sm leading-relaxed transition-all ${item.isCompleted ? 'line-through text-slate-500' : 'text-slate-200'}`}
-                            />
+                            {/* Task Inline Input & Badges */}
+                            <div className="flex-1 flex flex-col gap-1 min-w-0">
+                              <input
+                                ref={(el) => (itemInputRefs.current[item.id] = el)}
+                                type="text"
+                                value={item.text}
+                                onChange={(e) => updateItemText(section.id, item.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addItem(section.id, item.id);
+                                  } else if (e.key === 'Backspace' && item.text === '') {
+                                    e.preventDefault();
+                                    deleteItem(section.id, item.id, true);
+                                  }
+                                }}
+                                placeholder="To-do item... (press Enter for next)"
+                                className={`w-full bg-transparent border-none outline-none text-sm leading-relaxed transition-all ${item.isCompleted ? 'line-through text-slate-500' : 'text-slate-200'}`}
+                              />
+
+                              {/* Badges for recurring, priority, due date */}
+                              {(item.dueDate || item.priority || item.isRecurring) && (
+                                <div className="flex flex-wrap items-center gap-1.5 text-[10px] mt-0.5">
+                                  {item.isRecurring && (
+                                    <span className="uppercase font-bold text-blue-400 bg-blue-500/20 border border-blue-500/40 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                      <RefreshCw size={10} />
+                                      {item.recurrenceType === 'weekdays' && item.recurrenceDays?.length
+                                        ? item.recurrenceDays.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d].substring(0,2)).join(',')
+                                        : item.recurrenceType || 'daily'}
+                                    </span>
+                                  )}
+                                  {item.priority && item.priority !== Priority.MEDIUM && (
+                                    <span className={`uppercase font-bold px-1.5 py-0.5 rounded ${
+                                      item.priority === Priority.HIGH
+                                        ? 'bg-red-500/20 text-red-400 border border-red-500/40'
+                                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                                    }`}>
+                                      {item.priority}
+                                    </span>
+                                  )}
+                                  {item.dueDate && (
+                                    <span className="text-slate-400 bg-slate-800/80 border border-slate-700/60 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                      <Calendar size={10} /> {item.dueDate}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
 
                             {/* Action Buttons (visible on hover) */}
                             <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
-                              {/* Quick Schedule to main Tasks */}
+                              {/* Edit & Recurrence Settings */}
                               <button
-                                onClick={() => setScheduleModalItem({ text: item.text, sectionTitle: section.title })}
+                                onClick={() => openEditModal(section.id, section.title, item)}
                                 className="p-1 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded text-xs flex items-center gap-1"
-                                title="Schedule this task to Daily Tasks"
+                                title="Edit task details & recurring options"
                               >
-                                <Calendar size={13} />
+                                <Calendar size={14} />
                               </button>
 
                               {/* Delete Item */}
@@ -743,57 +1004,182 @@ export default function FullTaskManager() {
         </div>
       )}
 
-      {/* Schedule to Tasks Modal */}
-      {scheduleModalItem && (
+      {/* Task Details & Recurrence Settings Modal */}
+      {modalTask && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
-            <div className="flex items-center gap-2 text-blue-400 font-bold mb-2">
-              <Calendar size={18} /> Schedule Task to Main Tasks
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2 text-white font-bold text-lg">
+                <Calendar size={20} className="text-blue-400" />
+                <span>Task Settings & Recurrence</span>
+              </div>
+              <span className="text-xs text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700/50">
+                {modalTask.sectionTitle}
+              </span>
             </div>
-            <p className="text-slate-300 text-sm font-medium mb-4 p-2.5 bg-slate-800/60 rounded-lg border border-slate-700/40">
-              &ldquo;{scheduleModalItem.text}&rdquo;
-            </p>
 
             <div className="space-y-4">
+              {/* Task Title Input */}
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1.5">Due Date</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1.5 uppercase tracking-wider">
+                  Task Name
+                </label>
                 <input
-                  type="date"
-                  value={scheduleDate}
-                  onChange={(e) => setScheduleDate(e.target.value)}
+                  type="text"
+                  value={modalTask.title}
+                  onChange={(e) => setModalTask({ ...modalTask, title: e.target.value })}
+                  placeholder="Task title..."
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
+              {/* Grid: Priority & Due Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5 uppercase tracking-wider">
+                    Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={modalTask.dueDate || ''}
+                    onChange={(e) => setModalTask({ ...modalTask, dueDate: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5 uppercase tracking-wider">
+                    Priority
+                  </label>
+                  <select
+                    value={modalTask.priority}
+                    onChange={(e) => setModalTask({ ...modalTask, priority: e.target.value as Priority })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={Priority.HIGH}>🔴 High Priority</option>
+                    <option value={Priority.MEDIUM}>🟡 Medium Priority</option>
+                    <option value={Priority.LOW}>🟢 Low Priority</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Recurrent Task Mode Section */}
+              <div className="border border-slate-800 bg-slate-800/40 rounded-xl p-4">
+                <label className="flex items-center gap-2.5 text-sm font-medium text-slate-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={modalTask.isRecurring}
+                    onChange={(e) => setModalTask({
+                      ...modalTask,
+                      isRecurring: e.target.checked,
+                      recurrenceType: e.target.checked ? (modalTask.recurrenceType || 'daily') : modalTask.recurrenceType
+                    })}
+                    className="w-4 h-4 rounded bg-slate-700 border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                  />
+                  <span className="flex items-center gap-1.5">
+                    <RefreshCw size={14} className={modalTask.isRecurring ? 'text-blue-400' : 'text-slate-500'} />
+                    <span>Recurring Task Mode</span>
+                  </span>
+                </label>
+
+                {modalTask.isRecurring && (
+                  <div className="mt-3.5 pt-3 border-t border-slate-700/60 space-y-3 animate-in fade-in">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-400 block mb-1.5 uppercase tracking-wider">
+                        Repeat Every
+                      </label>
+                      <select
+                        value={modalTask.recurrenceType || 'daily'}
+                        onChange={(e) => setModalTask({ ...modalTask, recurrenceType: e.target.value as any })}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="daily">Daily (Every Day)</option>
+                        <option value="weekly">Weekly (Every Week)</option>
+                        <option value="monthly">Monthly (Every Month)</option>
+                        <option value="weekdays">Specific Days of Week</option>
+                      </select>
+                    </div>
+
+                    {modalTask.recurrenceType === 'weekdays' && (
+                      <div>
+                        <label className="text-xs text-slate-400 font-semibold uppercase mb-2 block">
+                          Select Days
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => {
+                            const isSelected = (modalTask.recurrenceDays || []).includes(index);
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                onClick={() => {
+                                  const currentDays = modalTask.recurrenceDays || [];
+                                  const updatedDays = currentDays.includes(index)
+                                    ? currentDays.filter(d => d !== index)
+                                    : [...currentDays, index].sort();
+                                  setModalTask({ ...modalTask, recurrenceDays: updatedDays });
+                                }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                  isSelected
+                                    ? 'bg-blue-600 text-white shadow-sm'
+                                    : 'bg-slate-700/80 text-slate-300 hover:bg-slate-700'
+                                }`}
+                              >
+                                {day}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Notes / Description */}
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1.5">Priority</label>
-                <select
-                  value={schedulePriority}
-                  onChange={(e) => setSchedulePriority(e.target.value as Priority)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value={Priority.HIGH}>High Priority</option>
-                  <option value={Priority.MEDIUM}>Medium Priority</option>
-                  <option value={Priority.LOW}>Low Priority</option>
-                </select>
+                <label className="text-xs font-semibold text-slate-400 block mb-1.5 uppercase tracking-wider">
+                  Notes / Details (Optional)
+                </label>
+                <textarea
+                  value={modalTask.notes || ''}
+                  onChange={(e) => setModalTask({ ...modalTask, notes: e.target.value })}
+                  rows={2}
+                  placeholder="Extra context or instructions..."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
+                />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 mt-6">
+            {/* Modal Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6 pt-4 border-t border-slate-800">
               <button
                 type="button"
-                onClick={() => setScheduleModalItem(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition"
+                onClick={() => setModalTask(null)}
+                className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition"
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={handleScheduleConfirm}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-sm shadow-sm transition"
-              >
-                Schedule Task
-              </button>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveItemDetails}
+                  className="flex-1 sm:flex-none px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg text-sm transition"
+                  title="Save changes to this item in Full-Task"
+                >
+                  Save in Full-Task
+                </button>
+                <button
+                  type="button"
+                  onClick={handleScheduleToMainTasks}
+                  className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-sm shadow-sm transition flex items-center justify-center gap-1.5"
+                  title="Also send this task to the Daily / Scheduled Tasks manager"
+                >
+                  <Calendar size={14} />
+                  <span>Schedule to Tasks</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
