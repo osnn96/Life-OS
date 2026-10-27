@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Task, Priority } from '../types';
-import { taskService } from '../services/db';
+import { taskService, syncTaskCompletionToFullTask } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { PriorityBadge, Card, PageHeader, Modal, Input, Select, TextArea } from './Shared';
 import { Plus, CheckSquare, Square, Trash2, Calendar, Archive, Layers, FileText, RefreshCw } from 'lucide-react';
@@ -81,6 +81,9 @@ const TaskManager = () => {
       if (editingTask.overdueFromDaily) {
         (baseTask as any).overdueFromDaily = editingTask.overdueFromDaily;
       }
+      if (editingTask.fullTaskSourceId) {
+        (baseTask as any).fullTaskSourceId = editingTask.fullTaskSourceId;
+      }
 
       if (editingTask.id) {
         await taskService.update(editingTask.id, baseTask);
@@ -152,10 +155,35 @@ const TaskManager = () => {
         updatedAt: new Date().toISOString(),
       };
       
-      await taskService.add(newTask, task.userId);
+      const newRef = await taskService.add(newTask, task.userId);
+
+      // Keep recurring task active on Full-Task board and update scheduledTaskId link to new instance
+      if (task.userId || currentUser?.uid) {
+        syncTaskCompletionToFullTask(
+          task.userId || currentUser!.uid,
+          task.id,
+          false,
+          task.fullTaskSourceId,
+          (newRef as any)?.id,
+          true
+        ).catch(err => console.error('FullTask sync error:', err));
+      }
     } else {
       // For non-recurring tasks, just toggle completion
-      await taskService.update(task.id, { isCompleted: !task.isCompleted });
+      const newCompleted = !task.isCompleted;
+      await taskService.update(task.id, { isCompleted: newCompleted });
+
+      // Sync completion status to Full-Task board
+      if (task.userId || currentUser?.uid) {
+        syncTaskCompletionToFullTask(
+          task.userId || currentUser!.uid,
+          task.id,
+          newCompleted,
+          task.fullTaskSourceId,
+          undefined,
+          false
+        ).catch(err => console.error('FullTask sync error:', err));
+      }
     }
   };
 

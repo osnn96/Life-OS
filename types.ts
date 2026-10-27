@@ -81,6 +81,7 @@ export interface Task extends BaseItem {
   recurrenceDays?: number[]; // For weekdays: [0,1,2,3,4,5,6] = Sun-Sat
   lastCompletedDate?: string; // Track when last completed for recurring tasks
   order?: number; // For drag & drop ordering
+  fullTaskSourceId?: string; // Link to originating FullTaskItem
 }
 
 export interface JobApplication extends BaseItem {

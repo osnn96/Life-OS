@@ -290,6 +290,11 @@ export default function FullTaskManager() {
   const updateItemText = (sectionId: string, itemId: string, text: string) => {
     if (!page) return;
     const scrollX = window.scrollX, scrollY = window.scrollY;
+
+    // Find the item to check for a linked Task
+    const sec = page.sections.find(s => s.id === sectionId);
+    const item = sec?.items.find(i => i.id === itemId);
+
     const updated = page.sections.map(s => {
       if (s.id !== sectionId) return s;
       return {
@@ -303,6 +308,36 @@ export default function FullTaskManager() {
     (window as any)._ftSaveTimeout = setTimeout(() => {
       savePage(updated);
     }, 300);
+
+    // Sync title change to linked Task (debounced separately)
+    if (item?.scheduledTaskId) {
+      if ((window as any)._ftTitleSyncTimeout) clearTimeout((window as any)._ftTitleSyncTimeout);
+      (window as any)._ftTitleSyncTimeout = setTimeout(async () => {
+        try {
+          await taskService.update(item.scheduledTaskId!, { title: text } as any);
+        } catch (err) {
+          console.error('Error syncing title to Tasks:', err);
+        }
+      }, 500);
+    } else if (currentUser) {
+      if ((window as any)._ftTitleSyncTimeout) clearTimeout((window as any)._ftTitleSyncTimeout);
+      (window as any)._ftTitleSyncTimeout = setTimeout(async () => {
+        try {
+          const q = query(
+            collection(db, 'tasks'),
+            where('userId', '==', currentUser.uid),
+            where('fullTaskSourceId', '==', itemId)
+          );
+          const snap = await getDocs(q);
+          for (const d of snap.docs) {
+            await taskService.update(d.id, { title: text } as any);
+          }
+        } catch (err) {
+          console.error('Error syncing title to Tasks by fullTaskSourceId:', err);
+        }
+      }, 500);
+    }
+
     requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
   };
 
@@ -385,6 +420,21 @@ export default function FullTaskManager() {
         }
       } catch (e) {
         console.error('Error syncing completion to task:', e);
+      }
+    } else {
+      // Fallback: check if task exists by fullTaskSourceId
+      try {
+        const q = query(
+          collection(db, 'tasks'),
+          where('userId', '==', currentUser.uid),
+          where('fullTaskSourceId', '==', itemId)
+        );
+        const snapshot = await getDocs(q);
+        for (const d of snapshot.docs) {
+          await taskService.update(d.id, { isCompleted: newCompleted });
+        }
+      } catch (e) {
+        console.error('Error syncing completion by fullTaskSourceId:', e);
       }
     }
   };
@@ -543,8 +593,13 @@ export default function FullTaskManager() {
   };
 
   // Save Item Details to Full-Task
-  const handleSaveItemDetails = () => {
+  const handleSaveItemDetails = async () => {
     if (!modalTask || !page) return;
+
+    // Find the existing item to check for a linked Task
+    const sec = page.sections.find(s => s.id === modalTask.sectionId);
+    const existingItem = sec?.items.find(i => i.id === modalTask.itemId);
+
     const updated = page.sections.map(s => {
       if (s.id !== modalTask.sectionId) return s;
       return {
@@ -566,6 +621,34 @@ export default function FullTaskManager() {
     });
     setPage({ ...page, sections: updated });
     savePage(updated);
+
+    // Sync all changed fields to linked Task
+    if (existingItem?.scheduledTaskId) {
+      try {
+        const taskUpdates: any = {
+          title: modalTask.title,
+          priority: modalTask.priority,
+          isRecurring: modalTask.isRecurring,
+        };
+        if (modalTask.dueDate) taskUpdates.dueDate = modalTask.dueDate;
+        if (modalTask.isRecurring) {
+          taskUpdates.recurrenceType = modalTask.recurrenceType;
+          if (modalTask.recurrenceType === 'weekdays' && modalTask.recurrenceDays?.length) {
+            taskUpdates.recurrenceDays = modalTask.recurrenceDays;
+          }
+          taskUpdates.isDaily = modalTask.recurrenceType === 'daily';
+        } else {
+          taskUpdates.recurrenceType = '';
+          taskUpdates.recurrenceDays = [];
+          taskUpdates.isDaily = false;
+        }
+        if (modalTask.notes) taskUpdates.description = modalTask.notes;
+        await taskService.update(existingItem.scheduledTaskId, taskUpdates);
+      } catch (err) {
+        console.error('Error syncing details to Tasks:', err);
+      }
+    }
+
     setModalTask(null);
   };
 

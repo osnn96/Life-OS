@@ -7,6 +7,7 @@ import {
   onSnapshot,
   query,
   where,
+  getDocs,
   Timestamp,
   DocumentData,
   QuerySnapshot,
@@ -22,6 +23,8 @@ import {
   ScholarshipProgram,
   Note,
   FullTaskPage,
+  FullTaskSection,
+  FullTaskItem,
   Priority, 
   JobStatus, 
   MasterAppType, 
@@ -199,8 +202,80 @@ export const linkService = new FirestoreService<UsefulLink>(COLLECTIONS.LINKS);
 export const scholarshipService = new FirestoreService<ScholarshipProgram>(COLLECTIONS.SCHOLARSHIP_PROGRAMS);
 export const noteService = new FirestoreService<Note>(COLLECTIONS.NOTES);
 
+/**
+ * Sync completion status from Tasks to Full-Task board
+ * When a task is marked done/undone in the Task manager:
+ * - If it's a recurring task: keep it on Full-Task (do NOT mark completed)
+ * - If it's a non-recurring task: update the linked item's isCompleted in Full-Task
+ */
+export const syncTaskCompletionToFullTask = async (
+  userId: string,
+  taskId: string,
+  isCompleted: boolean,
+  fullTaskSourceId?: string,
+  newScheduledTaskId?: string,
+  isRecurringTask?: boolean
+): Promise<void> => {
+  try {
+    const q = query(
+      collection(db, COLLECTIONS.FULL_TASKS),
+      where('userId', '==', userId)
+    );
+    const snapshot = await getDocs(q);
+
+    for (const pageDoc of snapshot.docs) {
+      const pageData = pageDoc.data() as FullTaskPage;
+      if (!pageData.sections || !Array.isArray(pageData.sections)) continue;
+
+      let pageModified = false;
+      const updatedSections = pageData.sections.map((section: FullTaskSection) => {
+        let sectionModified = false;
+        const updatedItems = (section.items || []).map((item: FullTaskItem) => {
+          const isTarget =
+            (fullTaskSourceId && item.id === fullTaskSourceId) ||
+            (item.scheduledTaskId && item.scheduledTaskId === taskId);
+
+          if (!isTarget) return item;
+
+          // If either item or the task itself is recurring:
+          // Keep on Full-Task board without marking completed
+          if (item.isRecurring || isRecurringTask) {
+            if (newScheduledTaskId && item.scheduledTaskId !== newScheduledTaskId) {
+              sectionModified = true;
+              pageModified = true;
+              return { ...item, scheduledTaskId: newScheduledTaskId };
+            }
+            return item;
+          }
+
+          // For non-recurring items:
+          // Sync completion status to Full-Task item
+          if (item.isCompleted !== isCompleted) {
+            sectionModified = true;
+            pageModified = true;
+            return { ...item, isCompleted };
+          }
+
+          return item;
+        });
+
+        return sectionModified ? { ...section, items: updatedItems } : section;
+      });
+
+      if (pageModified) {
+        await fullTaskService.update(pageDoc.id, {
+          sections: updatedSections,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error syncing task completion to Full-Task:', err);
+  }
+};
+
 // Optional: Seed data for testing (run manually in console if needed)
-export const seedData = async () => {
+export const seedData = async (userId: string = 'demo-user') => {
   try {
     await taskService.add({
       title: 'Update CV for AI Roles',
@@ -209,7 +284,7 @@ export const seedData = async () => {
       isCompleted: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    } as Omit<Task, 'id'>);
+    } as Omit<Task, 'id'>, userId);
 
     await jobService.add({
       company: 'TechCorp',
@@ -219,7 +294,7 @@ export const seedData = async () => {
       link: 'https://linkedin.com',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    } as Omit<JobApplication, 'id'>);
+    } as Omit<JobApplication, 'id'>, userId);
 
     console.log('Seed data added successfully!');
   } catch (error) {
