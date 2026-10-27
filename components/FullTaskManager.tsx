@@ -162,6 +162,8 @@ export default function FullTaskManager() {
                 cleanedItem.recurrenceDays = item.recurrenceDays;
               }
             }
+            if (item.scheduledTaskId) cleanedItem.scheduledTaskId = item.scheduledTaskId;
+            if (item.fullTaskSourceId) cleanedItem.fullTaskSourceId = item.fullTaskSourceId;
             return cleanedItem;
           })
         };
@@ -248,6 +250,7 @@ export default function FullTaskManager() {
       isCompleted: false
     };
 
+    const scrollX = window.scrollX, scrollY = window.scrollY;
     const updated = page.sections.map(s => {
       if (s.id !== sectionId) return s;
       if (!afterItemId) {
@@ -263,23 +266,30 @@ export default function FullTaskManager() {
     });
 
     setPage({ ...page, sections: updated });
-    savePage(updated);
+    if ((window as any)._ftSaveTimeout) clearTimeout((window as any)._ftSaveTimeout);
+    (window as any)._ftSaveTimeout = setTimeout(() => {
+      savePage(updated);
+    }, 300);
+    requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
 
     // Focus newly added item without scrolling
     setTimeout(() => {
       const el = itemInputRefs.current[newItemId];
       if (el) {
+        const x2 = window.scrollX, y2 = window.scrollY;
         try {
-          el.focus({ preventScroll: true } as any);
+          (el as any).focus({ preventScroll: true });
         } catch {
           el.focus();
         }
+        window.scrollTo(x2, y2);
       }
-    }, 30);
+    }, 0);
   };
 
   const updateItemText = (sectionId: string, itemId: string, text: string) => {
     if (!page) return;
+    const scrollX = window.scrollX, scrollY = window.scrollY;
     const updated = page.sections.map(s => {
       if (s.id !== sectionId) return s;
       return {
@@ -288,7 +298,12 @@ export default function FullTaskManager() {
       };
     });
     setPage({ ...page, sections: updated });
-    savePage(updated);
+    // Debounce save to avoid flicker
+    if ((window as any)._ftSaveTimeout) clearTimeout((window as any)._ftSaveTimeout);
+    (window as any)._ftSaveTimeout = setTimeout(() => {
+      savePage(updated);
+    }, 300);
+    requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
   };
 
   const toggleItemComplete = async (sectionId: string, itemId: string) => {
@@ -421,13 +436,15 @@ export default function FullTaskManager() {
       setTimeout(() => {
         const el = itemInputRefs.current[prevItemId!];
         if (el) {
+          const x = window.scrollX, y = window.scrollY;
           try {
-            el.focus({ preventScroll: true } as any);
+            (el as any).focus({ preventScroll: true });
           } catch {
             el.focus();
           }
+          window.scrollTo(x, y);
         }
-      }, 30);
+      }, 0);
     }
   };
 
@@ -672,9 +689,9 @@ export default function FullTaskManager() {
 
           {/* Sync status & Mode Switch */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg min-w-[90px] justify-center">
               <span className={`w-2 h-2 rounded-full ${saving ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
-              <span>{saving ? 'Saving...' : 'Synced to Cloud'}</span>
+              <span>{saving ? 'Saving...' : 'Synced'}</span>
             </div>
 
             <button
