@@ -265,10 +265,17 @@ export default function FullTaskManager() {
     setPage({ ...page, sections: updated });
     savePage(updated);
 
-    // Focus newly added item
+    // Focus newly added item without scrolling
     setTimeout(() => {
-      itemInputRefs.current[newItemId]?.focus();
-    }, 50);
+      const el = itemInputRefs.current[newItemId];
+      if (el) {
+        try {
+          el.focus({ preventScroll: true } as any);
+        } catch {
+          el.focus();
+        }
+      }
+    }, 30);
   };
 
   const updateItemText = (sectionId: string, itemId: string, text: string) => {
@@ -412,8 +419,15 @@ export default function FullTaskManager() {
 
     if (focusPrevious && prevItemId) {
       setTimeout(() => {
-        itemInputRefs.current[prevItemId!]?.focus();
-      }, 50);
+        const el = itemInputRefs.current[prevItemId!];
+        if (el) {
+          try {
+            el.focus({ preventScroll: true } as any);
+          } catch {
+            el.focus();
+          }
+        }
+      }, 30);
     }
   };
 
@@ -905,12 +919,15 @@ export default function FullTaskManager() {
 
                             {/* Task Inline Input & Badges */}
                             <div className="flex-1 flex flex-col gap-1 min-w-0">
-                              <input
-                                ref={(el) => (itemInputRefs.current[item.id] = el)}
-                                type="text"
-                                value={item.text}
-                                onChange={(e) => updateItemText(section.id, item.id, e.target.value)}
-                                onKeyDown={(e) => {
+              <input
+                ref={(el) => (itemInputRefs.current[item.id] = el)}
+                type="text"
+                value={item.text}
+                onChange={(e) => updateItemText(section.id, item.id, e.target.value)}
+                onFocus={(e) => {
+                  try { e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch {}
+                }}
+                onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault();
                                     addItem(section.id, item.id);
